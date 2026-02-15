@@ -32,7 +32,10 @@ services:
       - "5000:5000"
 
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      args:
+        - VITE_API_URL=${VITE_API_URL:-http://srv1267322.hstgr.cloud}
     container_name: vesper-frontend
     restart: always
     ports:
