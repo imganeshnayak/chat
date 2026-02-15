@@ -1,0 +1,126 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id          Int       @id @default(autoincrement())
+  username    String    @unique
+  email       String    @unique
+  password    String
+  displayName String?   @map("display_name")
+  bio         String?
+  avatarUrl   String?   @map("avatar_url")
+  role        String    @default("client")
+  status      String    @default("active")
+  telegramId  String?   @map("telegram_id")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  sentMessages     Message[]     @relation("SentMessages")
+  receivedMessages Message[]     @relation("ReceivedMessages")
+  activities       ActivityLog[]
+  clientDeals      EscrowDeal[]  @relation("ClientDeals")
+  vendorDeals      EscrowDeal[]  @relation("VendorDeals")
+  reportsCreated   Report[]      @relation("ReportsCreated")
+  reportsReceived  Report[]      @relation("ReportsReceived")
+  blockedUsers     BlockedUser[] @relation("BlockingUser")
+  blockedBy        BlockedUser[] @relation("BlockedByUser")
+
+  @@map("users")
+}
+
+model Message {
+  id             Int      @id @default(autoincrement())
+  senderId       Int      @map("sender_id")
+  receiverId     Int      @map("receiver_id")
+  chatId         String   @map("chat_id")
+  content        String
+  messageType    String   @default("text") @map("message_type")
+  attachmentUrl  String?  @map("attachment_url")
+  attachmentName String?  @map("attachment_name")
+  read           Boolean  @default(false)
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  sender   User @relation("SentMessages", fields: [senderId], references: [id])
+  receiver User @relation("ReceivedMessages", fields: [receiverId], references: [id])
+
+  @@map("messages")
+}
+
+model Report {
+  id          Int      @id @default(autoincrement())
+  reporterId  Int      @map("reporter_id")
+  reportedId  Int      @map("reported_id")
+  reason      String
+  status      String   @default("pending") // pending, resolved, dismissed
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  reporter    User     @relation("ReportsCreated", fields: [reporterId], references: [id])
+  reported    User     @relation("ReportsReceived", fields: [reportedId], references: [id])
+
+  @@map("reports")
+}
+
+model BlockedUser {
+  id        Int      @id @default(autoincrement())
+  blockerId Int      @map("blocker_id")
+  blockedId Int      @map("blocked_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  blocker   User     @relation("BlockingUser", fields: [blockerId], references: [id])
+  blocked   User     @relation("BlockedByUser", fields: [blockedId], references: [id])
+
+  @@unique([blockerId, blockedId])
+  @@map("blocked_users")
+}
+
+model ActivityLog {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  action    String
+  details   String?
+  status    String   @default("active")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("activity_log")
+}
+
+model EscrowDeal {
+  id              Int                  @id @default(autoincrement())
+  chatId          String               @map("chat_id")
+  clientId        Int                  @map("client_id")
+  vendorId        Int                  @map("vendor_id")
+  title           String
+  description     String?
+  totalAmount     Float                @map("total_amount")
+  releasedPercent Float                @default(0) @map("released_percent")
+  status          String               @default("active")
+  createdAt       DateTime             @default(now()) @map("created_at")
+  updatedAt       DateTime             @updatedAt @map("updated_at")
+
+  client       User                 @relation("ClientDeals", fields: [clientId], references: [id])
+  vendor       User                 @relation("VendorDeals", fields: [vendorId], references: [id])
+  transactions EscrowTransaction[]
+
+  @@map("escrow_deals")
+}
+
+model EscrowTransaction {
+  id        Int      @id @default(autoincrement())
+  dealId    Int      @map("deal_id")
+  percent   Float
+  amount    Float
+  note      String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  deal EscrowDeal @relation(fields: [dealId], references: [id], onDelete: Cascade)
+
+  @@map("escrow_transactions")
+}
