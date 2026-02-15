@@ -99,15 +99,16 @@ import crypto from 'crypto';
 // POST /api/auth/telegram
 router.post('/telegram', async (req, res) => {
     try {
-        const { auth_data } = req.body;
-        const bot_token = process.env.TELEGRAM_BOT_TOKEN;
-
-        if (!bot_token) {
-            return res.status(500).json({ error: 'Telegram Bot Token not configured.' });
+        // 1. Verify integrity of data
+        // Handle both wrapped {auth_data: data} and raw data
+        const payload = auth_data || req.body;
+        
+        if (!payload || !payload.hash) {
+            console.error('Missing telegram auth data or hash', { body: req.body });
+            return res.status(400).json({ error: 'Invalid Telegram authentication data.' });
         }
 
-        // 1. Verify integrity of data
-        const { hash, ...data } = auth_data;
+        const { hash, ...data } = payload;
         const dataCheckString = Object.keys(data)
             .sort()
             .map(key => `${key}=${data[key]}`)
