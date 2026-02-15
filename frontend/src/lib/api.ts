@@ -50,6 +50,7 @@ export interface AuthUser {
   avatarUrl?: string;
   role: string;
   status: string;
+  socialLinks?: { platform: string; url: string }[];
   createdAt: string;
 }
 
@@ -113,6 +114,7 @@ export function updateUserProfile(
     telegramId?: string;
     email?: string;
     avatarUrl?: string;
+    socialLinks?: { platform: string; url: string }[];
   }
 ): Promise<AuthUser> {
   return apiFetch<AuthUser>(`/api/users/profile/${userId}`, {

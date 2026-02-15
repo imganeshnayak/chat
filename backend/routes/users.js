@@ -69,7 +69,7 @@ router.get('/:id', auth, async (req, res) => {
     try {
         const user = await prisma.user.findUnique({
             where: { id: parseInt(req.params.id) },
-            select: { id: true, username: true, email: true, displayName: true, bio: true, avatarUrl: true, role: true, status: true, createdAt: true },
+            select: { id: true, username: true, email: true, displayName: true, bio: true, avatarUrl: true, socialLinks: true, role: true, status: true, createdAt: true },
         });
 
         if (!user) {
@@ -102,6 +102,7 @@ router.get('/profile/:id', auth, async (req, res) => {
                 role: true,
                 status: true,
                 telegramId: true,
+                socialLinks: true,
                 createdAt: true
             },
         });
@@ -124,13 +125,14 @@ router.put('/profile/:id', auth, async (req, res) => {
             return res.status(403).json({ error: 'Not authorized.' });
         }
 
-        const { displayName, bio, email, avatarUrl, role } = req.body;
+        const { displayName, bio, email, avatarUrl, role, socialLinks } = req.body;
 
         const updateData = {};
         if (displayName !== undefined) updateData.displayName = displayName;
         if (bio !== undefined) updateData.bio = bio;
         if (email !== undefined) updateData.email = email;
         if (avatarUrl !== undefined) updateData.avatarUrl = avatarUrl;
+        if (socialLinks !== undefined) updateData.socialLinks = socialLinks;
         if (role !== undefined && ['client', 'vendor'].includes(role)) updateData.role = role;
 
         const updatedUser = await prisma.user.update({
@@ -146,6 +148,7 @@ router.put('/profile/:id', auth, async (req, res) => {
                 role: true,
                 status: true,
                 telegramId: true,
+                socialLinks: true,
                 createdAt: true
             }
         });

@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, Share2, Copy, Mail, Phone, MessageSquare } from "lucide-react";
+import { ArrowLeft, Share2, Copy, Mail, Phone, MessageSquare, Twitter, Instagram, Linkedin, Github, Globe, Plus, Trash2, ExternalLink } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { getUser, updateUserProfile, uploadAvatar, AuthUser } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
@@ -19,6 +19,24 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+
+const PLATFORMS = [
+  { id: "twitter", name: "Twitter", icon: <Twitter className="h-4 w-4" /> },
+  { id: "instagram", name: "Instagram", icon: <Instagram className="h-4 w-4" /> },
+  { id: "linkedin", name: "LinkedIn", icon: <Linkedin className="h-4 w-4" /> },
+  { id: "github", name: "GitHub", icon: <Github className="h-4 w-4" /> },
+  { id: "website", name: "Website", icon: <Globe className="h-4 w-4" /> },
+  { id: "other", name: "Other", icon: <Globe className="h-4 w-4" /> },
+];
+
+const SocialIcon = ({ platform }: { platform: string }) => {
+  const p = platform.toLowerCase();
+  if (p.includes('twitter')) return <Twitter className="h-4 w-4" />;
+  if (p.includes('instagram')) return <Instagram className="h-4 w-4" />;
+  if (p.includes('linkedin')) return <Linkedin className="h-4 w-4" />;
+  if (p.includes('github')) return <Github className="h-4 w-4" />;
+  return <Globe className="h-4 w-4" />;
+};
 
 const ProfilePage = () => {
   const { userId } = useParams();
@@ -34,7 +52,8 @@ const ProfilePage = () => {
     displayName: "",
     bio: "",
     email: "",
-    role: ""
+    role: "",
+    socialLinks: [] as { platform: string; url: string }[]
   });
 
   useEffect(() => {
@@ -61,7 +80,8 @@ const ProfilePage = () => {
           displayName: userData.displayName || "",
           bio: userData.bio || "",
           email: userData.email || "",
-          role: userData.role || ""
+          role: userData.role || "",
+          socialLinks: userData.socialLinks || []
         });
       }
     } catch (err) {
@@ -127,6 +147,25 @@ const ProfilePage = () => {
     } catch (err) {
       toast({ title: "Upload failed", description: err instanceof Error ? err.message : "Failed to upload avatar", variant: "destructive" });
     }
+  };
+
+  const addSocialLink = () => {
+    setEditForm({
+      ...editForm,
+      socialLinks: [...editForm.socialLinks, { platform: "twitter", url: "" }]
+    });
+  };
+
+  const removeSocialLink = (index: number) => {
+    const newLinks = [...editForm.socialLinks];
+    newLinks.splice(index, 1);
+    setEditForm({ ...editForm, socialLinks: newLinks });
+  };
+
+  const updateSocialLink = (index: number, field: "platform" | "url", value: string) => {
+    const newLinks = [...editForm.socialLinks];
+    newLinks[index] = { ...newLinks[index], [field]: value };
+    setEditForm({ ...editForm, socialLinks: newLinks });
   };
 
   return (
@@ -199,6 +238,48 @@ const ProfilePage = () => {
                     placeholder="Tell us about yourself..."
                   />
                 </div>
+
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <Label>Social Links</Label>
+                    <Button variant="outline" size="sm" onClick={addSocialLink} className="h-8">
+                      <Plus className="h-3 w-3 mr-1" /> Add Link
+                    </Button>
+                  </div>
+
+                  {editForm.socialLinks.map((link, index) => (
+                    <div key={index} className="flex gap-2 items-start bg-secondary/50 p-2 rounded-lg border border-border">
+                      <div className="flex-1 space-y-2">
+                        <Select
+                          value={link.platform}
+                          onValueChange={(v) => updateSocialLink(index, "platform", v)}
+                        >
+                          <SelectTrigger className="bg-secondary border-border h-8 text-xs">
+                            <SelectValue placeholder="Platform" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {PLATFORMS.map(p => (
+                              <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Input
+                          placeholder="https://..."
+                          value={link.url}
+                          onChange={(e) => updateSocialLink(index, "url", e.target.value)}
+                          className="bg-secondary border-border h-8 text-xs"
+                        />
+                      </div>
+                      <Button variant="ghost" size="icon" onClick={() => removeSocialLink(index)} className="h-8 w-8 text-destructive">
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))}
+                  {editForm.socialLinks.length === 0 && (
+                    <p className="text-xs text-muted-foreground text-center py-2 italic">No social links added yet.</p>
+                  )}
+                </div>
+
                 <div className="flex gap-2 pt-2">
                   <Button className="flex-1" onClick={handleSave} disabled={isSaving}>
                     <Save className="mr-2 h-4 w-4" /> {isSaving ? "Saving..." : "Save"}
@@ -219,35 +300,67 @@ const ProfilePage = () => {
                   <p className="mt-4 text-sm text-muted-foreground whitespace-pre-wrap">{user.bio}</p>
                 )}
 
-                {/* Contact info */}
-                <div className="mt-6 space-y-3 text-left">
-                  <div className="flex items-center gap-3 text-sm">
-                    <Mail className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-card-foreground">{user.email}</span>
-                  </div>
-                  <div className="flex items-center gap-3 text-sm">
-                    <span className={`h-2.5 w-2.5 rounded-full ${user.status === "active" ? "bg-accent" : "bg-muted-foreground"}`} />
-                    <span className="text-card-foreground">
-                      {user.status === "active" ? "Active" : "Offline"}
-                    </span>
+                <div className="mt-8 space-y-3">
+                  {user.socialLinks && user.socialLinks.map((link, index) => (
+                    <a
+                      key={index}
+                      href={link.url.startsWith('http') ? link.url : `https://${link.url}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="block"
+                    >
+                      <Button
+                        variant="outline"
+                        className="w-full h-14 flex items-center justify-between px-6 bg-secondary/50 hover:bg-accent hover:text-accent-foreground border-border hover:border-accent transition-all duration-300 group shadow-sm hover:shadow-md"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="p-2 rounded-lg bg-background group-hover:bg-accent-foreground/10 transition-colors">
+                            <SocialIcon platform={link.platform} />
+                          </div>
+                          <span className="font-semibold capitalize text-base">{link.platform}</span>
+                        </div>
+                        <ExternalLink className="h-4 w-4 opacity-0 group-hover:opacity-100 transition-opacity" />
+                      </Button>
+                    </a>
+                  ))}
+                  {(!user.socialLinks || user.socialLinks.length === 0) && (
+                    <p className="text-sm text-muted-foreground italic py-4">No social links added yet.</p>
+                  )}
+                </div>
+
+                {/* Contact info - simplified for Linktree view */}
+                <div className="mt-10 pt-6 border-t border-border/50">
+                  <div className="flex flex-col items-center gap-4">
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground px-4 py-2 bg-secondary/30 rounded-full">
+                      <Mail className="h-4 w-4" />
+                      <span>{user.email}</span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <span className={`h-2 w-2 rounded-full ${user.status === "active" ? "bg-accent animate-pulse" : "bg-muted-foreground"}`} />
+                      <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                        {user.status === "active" ? "Available Now" : "Unavailable"}
+                      </span>
+                    </div>
                   </div>
                 </div>
 
                 {/* Actions */}
-                <div className="mt-6 flex flex-col gap-3">
-                  {isOwnProfile ? (
-                    <Button className="w-full" onClick={() => setIsEditing(true)}>
-                      <Edit2 className="mr-2 h-4 w-4" /> Edit Profile
+                <div className="mt-10 flex flex-col gap-3">
+                  {isOwnProfile && (
+                    <Button className="w-full shadow-lg shadow-primary/20" onClick={() => setIsEditing(true)}>
+                      <Edit2 className="mr-2 h-4 w-4" /> Edit My Profile
                     </Button>
-                  ) : (
-                    <Link to="/chat">
-                      <Button className="w-full">
-                        <MessageSquare className="mr-2 h-4 w-4" /> Message
+                  )}
+                  {!isOwnProfile && (
+                    <Link to={`/chat?userId=${user.id}`}>
+                      <Button className="w-full shadow-lg shadow-primary/20">
+                        <MessageSquare className="mr-2 h-4 w-4" /> Send message
                       </Button>
                     </Link>
                   )}
-                  <Button variant="outline" className="w-full" onClick={copyLink}>
-                    <Share2 className="mr-2 h-4 w-4" /> Share Profile
+                  <Button variant="ghost" className="w-full text-muted-foreground hover:text-foreground" onClick={copyLink}>
+                    <Share2 className="mr-2 h-4 w-4" /> {isOwnProfile ? "Share My Profile" : `Share ${user.displayName}'s profile`}
                   </Button>
                 </div>
               </div>
@@ -255,14 +368,13 @@ const ProfilePage = () => {
           </CardContent>
         </Card>
 
-        {/* Share section */}
-        <Card className="bg-card border-border mt-4">
-          <CardContent className="pt-6">
-            <h3 className="font-semibold text-card-foreground mb-3">Profile Link</h3>
-            <div className="flex items-center gap-2">
-              <Input value={profileLink} readOnly className="bg-secondary border-border text-xs" />
-              <Button variant="ghost" size="icon" onClick={copyLink}>
-                <Copy className="h-4 w-4" />
+        {/* Share section - more compact */}
+        <Card className="bg-card/50 backdrop-blur-sm border-border mt-6">
+          <CardContent className="py-4">
+            <div className="flex items-center justify-between gap-4">
+              <p className="text-xs font-medium text-muted-foreground truncate flex-1">{profileLink}</p>
+              <Button variant="secondary" size="sm" onClick={copyLink} className="h-8 shrink-0">
+                <Copy className="h-4 w-4 mr-2" /> Copy
               </Button>
             </div>
           </CardContent>

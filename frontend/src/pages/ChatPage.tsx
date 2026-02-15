@@ -39,7 +39,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import {
   getChatList, getMessages, sendMessage, markMessagesAsRead, uploadFile,
-  searchUsers, blockUser, reportUser, clearChatHistory,
+  searchUsers, blockUser, reportUser, clearChatHistory, getUser,
   Chat as ChatType, Message as MessageType, AuthUser
 } from "@/lib/api";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -89,9 +89,9 @@ const ConversationList = ({
   selectedChat: ChatType | null;
   setSelectedChat: (chat: ChatType | null) => void;
 }) => (
-  <div className="flex flex-col h-full bg-background">
+  <div className="flex flex-col h-full bg-background overflow-hidden">
     {/* Header */}
-    <div className="p-4 border-b border-border">
+    <div className="p-4 border-b border-border sticky top-0 z-10 bg-background/95 backdrop-blur-md">
       <h1 className="text-xl font-bold text-foreground mb-3">Chats</h1>
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -243,9 +243,9 @@ const ChatView = ({
   }
 
   return (
-    <div className="flex flex-col h-full bg-background">
+    <div className="flex flex-col h-full bg-background overflow-hidden">
       {/* Chat header */}
-      <div className="flex items-center gap-3 p-4 border-b border-border">
+      <div className="flex items-center gap-3 p-4 border-b border-border sticky top-0 z-20 bg-background/95 backdrop-blur-md">
         {isMobile && (
           <button onClick={() => setSelectedChat(null)}>
             <ArrowLeft className="h-5 w-5 text-foreground" />
@@ -602,16 +602,36 @@ const ChatPage = () => {
     }
   }, []);
 
-  const handleSearch = useCallback(async () => {
-    if (searchQuery.trim().length < 2) {
+  const startChat = useCallback((foundUser: AuthUser) => {
+    // Create a new chat object for the user
+    const newChat: ChatType = {
+      chat_id: `chat_${user?.id}_${foundUser.id}_${Date.now()}`,
+      last_message: "New conversation",
+      last_message_time: new Date().toISOString(),
+      user_id: foundUser.id,
+      display_name: foundUser.displayName,
+      avatar_url: foundUser.avatarUrl,
+      username: foundUser.username,
+      unread_count: 0,
+    };
+
+    setSelectedChat(newChat);
+    setSearchQuery("");
+    setSearchResults([]);
+    setMessages([]);
+  }, [user?.id]);
+
+  const handleSearch = useCallback(async (query = searchQuery) => {
+    if (query.trim().length < 2) {
       setSearchResults([]);
       return;
     }
 
     setIsSearching(true);
     try {
-      const results = await searchUsers(searchQuery);
+      const results = await searchUsers(query);
       setSearchResults(results);
+      return results;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to search users");
       setSearchResults([]);
@@ -619,6 +639,37 @@ const ChatPage = () => {
       setIsSearching(false);
     }
   }, [searchQuery]);
+
+  // Handle automatic chat selection from query params
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const targetUserId = params.get('userId');
+
+    if (targetUserId && user && chats.length > 0) {
+      const targetIdNum = parseInt(targetUserId);
+      if (targetIdNum === user.id) return; // Can't chat with self
+
+      // 1. Check if chat already exists
+      const existingChat = chats.find(c => c.user_id === targetIdNum);
+      if (existingChat) {
+        setSelectedChat(existingChat);
+        // Clear param to avoid re-triggering if user navigates back to list
+        window.history.replaceState({}, '', '/chat');
+      } else {
+        // 2. If not, fetch user and start new chat
+        const fetchAndStartChat = async () => {
+          try {
+            const targetUser = await getUser(targetIdNum);
+            startChat(targetUser);
+            window.history.replaceState({}, '', '/chat');
+          } catch (err) {
+            console.error("Failed to start chat from query param:", err);
+          }
+        };
+        fetchAndStartChat();
+      }
+    }
+  }, [user, chats, startChat]);
 
   // Load chats on mount and when user changes
   useEffect(() => {
@@ -692,24 +743,6 @@ const ChatPage = () => {
     return () => clearTimeout(timer);
   }, [searchQuery, handleSearch]);
 
-  const startChat = useCallback((foundUser: AuthUser) => {
-    // Create a new chat object for the user
-    const newChat: ChatType = {
-      chat_id: `chat_${user?.id}_${foundUser.id}_${Date.now()}`,
-      last_message: "New conversation",
-      last_message_time: new Date().toISOString(),
-      user_id: foundUser.id,
-      display_name: foundUser.displayName,
-      avatar_url: foundUser.avatarUrl,
-      username: foundUser.username,
-      unread_count: 0,
-    };
-
-    setSelectedChat(newChat);
-    setSearchQuery("");
-    setSearchResults([]);
-    setMessages([]);
-  }, [user?.id]);
 
   const handleSend = useCallback(async () => {
     if (!newMessage.trim() || !selectedChat || !user) return;
@@ -774,7 +807,7 @@ const ChatPage = () => {
   // Mobile: show one panel at a time
   if (isMobile) {
     return (
-      <div className="h-screen">
+      <div className="h-[calc(100vh-64px)] overflow-hidden">
         {selectedChat ? (
           <ChatView
             selectedChat={selectedChat}
@@ -810,8 +843,8 @@ const ChatPage = () => {
 
   // Desktop: side-by-side
   return (
-    <div className="flex h-screen">
-      <div className="w-80 border-r border-border shrink-0">
+    <div className="flex h-[calc(100vh-64px)] overflow-hidden">
+      <div className="w-80 border-r border-border shrink-0 h-full overflow-hidden">
         <ConversationList
           searchQuery={searchQuery}
           setSearchQuery={setSearchQuery}
@@ -824,7 +857,7 @@ const ChatPage = () => {
           setSelectedChat={setSelectedChat}
         />
       </div>
-      <div className="flex-1">
+      <div className="flex-1 h-full overflow-hidden">
         <ChatView
           selectedChat={selectedChat}
           setSelectedChat={setSelectedChat}
