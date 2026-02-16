@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   Search, Send, Paperclip, Smile, ArrowLeft, Image, FileText,
   Mic, MoreVertical, DollarSign, User as UserIcon, Plus,
-  Trash2, Ban, AlertTriangle, Download
+  Trash2, Ban, AlertTriangle, Download, X, CheckCircle2, Loader2
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
@@ -40,10 +40,14 @@ import {
 import {
   getChatList, getMessages, sendMessage, markMessagesAsRead, uploadFile,
   searchUsers, blockUser, reportUser, clearChatHistory, getUser,
+  deleteMessage, deleteMessagesBatch,
   Chat as ChatType, Message as MessageType, AuthUser
 } from "@/lib/api";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { socketService } from "@/lib/socket";
+import { getCloudinaryDownloadUrl, downloadFile } from "@/lib/cloudinary";
+import LoadingScreen from "@/components/ui/LoadingScreen";
+import FilePreviewDialog from "@/components/chat/FilePreviewDialog";
 
 function formatTime(ts: string) {
   return new Date(ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
@@ -202,7 +206,15 @@ const ChatView = ({
   handleSend,
   messageInputRef,
   fileInputRef,
-  handleFileSelect
+  handleFileSelect,
+  onMessageDeleted,
+  selectedMessages,
+  setSelectedMessages,
+  onDeleteMessagesBatch,
+  pendingFile,
+  setPendingFile,
+  handleConfirmUpload,
+  isLoading
 }: {
   selectedChat: ChatType | null;
   setSelectedChat: (chat: ChatType | null) => void;
@@ -217,12 +229,53 @@ const ChatView = ({
   messageInputRef: React.RefObject<HTMLInputElement>;
   fileInputRef: React.RefObject<HTMLInputElement>;
   handleFileSelect: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  onMessageDeleted: (messageId: number) => void;
+  selectedMessages: number[];
+  setSelectedMessages: (ids: number[]) => void;
+  onDeleteMessagesBatch: (ids: number[]) => void;
+  pendingFile: File | null;
+  setPendingFile: (file: File | null) => void;
+  handleConfirmUpload: (caption: string) => void;
+  isLoading: boolean;
 }) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+
+  const isSelectionMode = selectedMessages.length > 0;
+
+  const toggleMessageSelection = (messageId: number) => {
+    if (selectedMessages.includes(messageId)) {
+      setSelectedMessages(selectedMessages.filter(id => id !== messageId));
+    } else {
+      setSelectedMessages([...selectedMessages, messageId]);
+    }
+  };
+
+  const handleMessageClick = (msg: MessageType) => {
+    if (isSelectionMode) {
+      toggleMessageSelection(msg.id);
+    }
+  };
+
+  const [longPressTimer, setLongPressTimer] = useState<NodeJS.Timeout | null>(null);
+
+  const onTouchStart = (messageId: number) => {
+    if (!isMobile) return;
+    const timer = setTimeout(() => {
+      toggleMessageSelection(messageId);
+    }, 500);
+    setLongPressTimer(timer);
+  };
+
+  const onTouchEnd = () => {
+    if (longPressTimer) {
+      clearTimeout(longPressTimer);
+      setLongPressTimer(null);
+    }
   };
 
   useEffect(() => {
@@ -245,37 +298,68 @@ const ChatView = ({
   return (
     <div className="flex flex-col h-full bg-background overflow-hidden">
       {/* Chat header */}
-      <div className="flex items-center gap-3 p-4 border-b border-border sticky top-0 z-20 bg-background/95 backdrop-blur-md">
-        {isMobile && (
-          <button onClick={() => setSelectedChat(null)}>
-            <ArrowLeft className="h-5 w-5 text-foreground" />
-          </button>
+      <div className="flex items-center gap-3 p-4 border-b border-border sticky top-0 z-20 bg-background/95 backdrop-blur-md min-h-[73px]">
+        {isSelectionMode ? (
+          <div className="flex items-center justify-between w-full">
+            <div className="flex items-center gap-4">
+              <button
+                onClick={() => setSelectedMessages([])}
+                className="p-1 hover:bg-secondary rounded-full transition-colors"
+              >
+                <X className="h-6 w-6 text-foreground" />
+              </button>
+              <h3 className="font-semibold text-lg">{selectedMessages.length}</h3>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => onDeleteMessagesBatch(selectedMessages)}
+                className="text-destructive hover:text-destructive hover:bg-destructive/10"
+              >
+                <Trash2 className="h-5 w-5" />
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <>
+            {isMobile && (
+              <button onClick={() => setSelectedChat(null)}>
+                <ArrowLeft className="h-5 w-5 text-foreground" />
+              </button>
+            )}
+            <Avatar className="h-10 w-10">
+              <AvatarImage src={selectedChat.avatar_url} />
+              <AvatarFallback>{selectedChat.display_name[0]}</AvatarFallback>
+            </Avatar>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-1.5">
+                <h3 className="font-semibold text-foreground truncate">{selectedChat.display_name}</h3>
+                {selectedChat.verified && (
+                  <img src="/verified-badge.svg" alt="Verified" className="h-5 w-5 flex-shrink-0" title="Verified Account" />
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground">@{selectedChat.username}</p>
+            </div>
+            <div className="flex gap-1">
+              <Button variant="ghost" size="icon" onClick={() => navigate(`/profile/${selectedChat.user_id}`)}>
+                <UserIcon className="h-5 w-5" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => navigate(`/escrow?chatId=${selectedChat.chat_id}&vendorId=${selectedChat.user_id}`)}
+              >
+                <DollarSign className="h-5 w-5 text-primary" />
+              </Button>
+              <ChatMoreMenu
+                chatId={selectedChat.chat_id}
+                userInfo={{ id: selectedChat.user_id, displayName: selectedChat.display_name }}
+                onChatCleared={() => setSelectedChat(null)}
+              />
+            </div>
+          </>
         )}
-        <Avatar className="h-10 w-10">
-          <AvatarImage src={selectedChat.avatar_url} />
-          <AvatarFallback>{selectedChat.display_name[0]}</AvatarFallback>
-        </Avatar>
-        <div className="flex-1 min-w-0">
-          <h3 className="font-semibold text-foreground truncate">{selectedChat.display_name}</h3>
-          <p className="text-xs text-muted-foreground">@{selectedChat.username}</p>
-        </div>
-        <div className="flex gap-1">
-          <Button variant="ghost" size="icon" onClick={() => navigate(`/profile/${selectedChat.user_id}`)}>
-            <UserIcon className="h-5 w-5" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => navigate(`/escrow?chatId=${selectedChat.chat_id}&vendorId=${selectedChat.user_id}`)}
-          >
-            <DollarSign className="h-5 w-5 text-primary" />
-          </Button>
-          <ChatMoreMenu
-            chatId={selectedChat.chat_id}
-            userInfo={{ id: selectedChat.user_id, displayName: selectedChat.display_name }}
-            onChatCleared={() => setSelectedChat(null)}
-          />
-        </div>
       </div>
 
       {/* Messages */}
@@ -287,38 +371,90 @@ const ChatView = ({
             messages.map((msg) => {
               const isMine = msg.senderId === user?.id;
               return (
-                <div key={msg.id} className={`flex ${isMine ? "justify-end" : "justify-start"}`}>
+                <div
+                  key={msg.id}
+                  className={`flex ${isMine ? "justify-end" : "justify-start"} items-center gap-2 group relative ${selectedMessages.includes(msg.id) ? "bg-primary/10 -mx-4 px-4 py-1" : ""}`}
+                  onClick={() => handleMessageClick(msg)}
+                  onTouchStart={() => onTouchStart(msg.id)}
+                  onTouchEnd={onTouchEnd}
+                  onContextMenu={(e) => {
+                    if (isMobile) {
+                      e.preventDefault();
+                      toggleMessageSelection(msg.id);
+                    }
+                  }}
+                >
+                  {isSelectionMode && (
+                    <div className={`absolute ${isMine ? "left-2" : "right-2"} z-10`}>
+                      <div className={`h-5 w-5 rounded-full border-2 ${selectedMessages.includes(msg.id) ? "bg-primary border-primary flex items-center justify-center" : "border-muted-foreground"}`}>
+                        {selectedMessages.includes(msg.id) && <CheckCircle2 className="h-3 w-3 text-primary-foreground" />}
+                      </div>
+                    </div>
+                  )}
+                  {isMine && !msg.isDeleted && !isSelectionMode && !isMobile && (
+                    <div className="opacity-0 group-hover:opacity-100 transition-opacity order-first">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full hover:bg-secondary">
+                            <MoreVertical className="h-4 w-4 text-muted-foreground" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="start" className="w-32 bg-card border-border">
+                          <DropdownMenuItem
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onMessageDeleted(msg.id);
+                            }}
+                            className="text-destructive focus:text-destructive"
+                          >
+                            <Trash2 className="mr-2 h-4 w-4" /> Delete
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleMessageSelection(msg.id);
+                            }}
+                          >
+                            <Trash2 className="mr-2 h-4 w-4" /> Select
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+                  )}
                   <div
-                    className={`max-w-[75%] rounded-2xl px-4 py-2.5 ${isMine
+                    className={`max-w-[75%] rounded-2xl px-4 py-2.5 relative ${isMine
                       ? "bg-primary text-primary-foreground rounded-br-md"
                       : "bg-secondary text-secondary-foreground rounded-bl-md"
-                      }`}
+                      } ${msg.isDeleted ? "opacity-60 italic" : ""}`}
                   >
                     <p className="text-sm">{msg.content}</p>
-                    {msg.attachmentUrl && (
+                    {msg.attachmentUrl && !msg.isDeleted && (
                       <div className="mt-2 p-2 bg-black/10 rounded-lg flex items-center gap-2">
                         {msg.messageType === 'image' || msg.attachmentUrl.match(/\.(jpg|jpeg|png|gif|webp)$/i) ? (
                           <div
-                            className="cursor-pointer hover:opacity-90 transition-opacity"
+                            className="cursor-pointer hover:opacity-90 transition-opacity relative"
                             onClick={() => setPreviewImage(msg.attachmentUrl || null)}
                           >
                             <img src={msg.attachmentUrl} alt="attachment" className="max-w-full rounded h-48 object-cover shadow-sm border border-white/10" />
+                            {(msg as any).isUploading && (
+                              <div className="absolute inset-0 bg-black/40 rounded flex items-center justify-center backdrop-blur-sm">
+                                <Loader2 className="h-8 w-8 text-white animate-spin" />
+                              </div>
+                            )}
                           </div>
                         ) : (
                           <div className="flex items-center gap-2 overflow-hidden">
                             <FileText className="h-5 w-5 shrink-0" />
-                            <a
-                              href={msg.attachmentUrl.includes('cloudinary.com')
-                                ? msg.attachmentUrl.replace('/upload/', '/upload/fl_attachment/')
-                                : msg.attachmentUrl}
-                              download={msg.attachmentName || "download"}
-                              target="_blank"
-                              rel="noopener noreferrer"
+                            <button
+                              onClick={(e) => {
+                                e.preventDefault();
+                                downloadFile(msg.attachmentUrl || "", msg.attachmentName || "download");
+                              }}
                               className="text-xs underline truncate hover:text-primary transition-colors flex items-center gap-1"
                             >
                               {msg.attachmentName || 'Download File'}
                               <Download className="h-3 w-3" />
-                            </a>
+                            </button>
                           </div>
                         )}
                       </div>
@@ -357,13 +493,15 @@ const ChatView = ({
               >
                 <ArrowLeft className="h-5 w-5 rotate-180" />
               </Button>
-              <a
-                href={previewImage?.replace('/upload/', '/upload/fl_attachment/') || ""}
-                download="download"
+              <button
+                onClick={() => {
+                  const filename = messages.find(m => m.attachmentUrl === previewImage)?.attachmentName || "download";
+                  downloadFile(previewImage || "", filename);
+                }}
                 className="flex items-center justify-center h-10 w-10 rounded-full bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg transition-transform active:scale-95"
               >
                 <Download className="h-5 w-5" />
-              </a>
+              </button>
             </div>
           </div>
         </DialogContent>
@@ -413,6 +551,14 @@ const ChatView = ({
           </Button>
         </div>
       </div>
+
+      <FilePreviewDialog
+        file={pendingFile}
+        isOpen={!!pendingFile}
+        onClose={() => setPendingFile(null)}
+        onSend={handleConfirmUpload}
+        isUploading={isLoading}
+      />
     </div>
   );
 };
@@ -551,8 +697,14 @@ const ChatMoreMenu = ({
               className="bg-secondary border-border min-h-[100px]"
             />
             <div className="flex justify-end gap-2">
-              <Button variant="ghost" onClick={() => setIsReportDialogOpen(false)}>Cancel</Button>
-              <Button onClick={handleReportUser} disabled={isLoading || !reportReason.trim()}>
+              <Button variant="ghost" onClick={() => setIsReportDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={handleReportUser}
+                disabled={isLoading || !reportReason.trim()}
+              >
                 {isLoading ? "Submitting..." : "Submit Report"}
               </Button>
             </div>
@@ -567,6 +719,7 @@ const ChatPage = () => {
   const isMobile = useIsMobile();
   const navigate = useNavigate();
   const { user, isLoading: authLoading } = useAuth();
+  const { toast } = useToast();
 
   const [chats, setChats] = useState<ChatType[]>([]);
   const [messages, setMessages] = useState<MessageType[]>([]);
@@ -579,6 +732,8 @@ const ChatPage = () => {
   const [error, setError] = useState("");
   const messageInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [selectedMessages, setSelectedMessages] = useState<number[]>([]);
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
 
 
   const loadChats = useCallback(async () => {
@@ -613,6 +768,7 @@ const ChatPage = () => {
       avatar_url: foundUser.avatarUrl,
       username: foundUser.username,
       unread_count: 0,
+      verified: foundUser.verified || false,
     };
 
     setSelectedChat(newChat);
@@ -734,6 +890,24 @@ const ChatPage = () => {
     }
   }, [selectedChat?.chat_id, user, loadMessages, loadChats]);
 
+  // Handle message deletion from other users
+  useEffect(() => {
+    if (!user) return;
+    const cleanup = socketService.onMessageDeleted((data) => {
+      if (selectedChat && data.chatId === selectedChat.chat_id) {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === data.messageId
+              ? { ...m, isDeleted: true, content: "This message was deleted", attachmentUrl: undefined, attachmentName: undefined }
+              : m
+          )
+        );
+      }
+      loadChats(); // Update last message in chat list
+    });
+    return cleanup;
+  }, [user, selectedChat, loadChats]);
+
   // Search users when query changes - debounce to avoid excessive searching
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -770,7 +944,30 @@ const ChatPage = () => {
     }
   }, [newMessage, selectedChat, user, loadMessages, loadChats]);
 
-  const handleFileSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleMessageDeleted = useCallback(async (messageId: number) => {
+    try {
+      await deleteMessage(messageId);
+      toast({ title: "Message Deleted", description: "Your message has been deleted." });
+      if (selectedChat) loadMessages(selectedChat.chat_id);
+    } catch (err) {
+      toast({ title: "Error", description: err instanceof Error ? err.message : "Failed to delete message", variant: "destructive" });
+    }
+  }, [selectedChat, loadMessages, toast]);
+
+  const handleDeleteMessagesBatch = useCallback(async (ids: number[]) => {
+    if (ids.length === 0) return;
+    try {
+      await deleteMessagesBatch(ids);
+      toast({ title: "Messages Deleted", description: `${ids.length} messages have been deleted.` });
+      setSelectedMessages([]);
+      if (selectedChat) loadMessages(selectedChat.chat_id);
+    } catch (err) {
+      toast({ title: "Error", description: err instanceof Error ? err.message : "Failed to delete messages", variant: "destructive" });
+    }
+  }, [selectedChat, loadMessages, toast]);
+
+
+  const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !selectedChat || !user) return;
 
@@ -781,28 +978,60 @@ const ChatPage = () => {
       return;
     }
 
+    setPendingFile(file);
+    // Reset file input so same file can be selected again
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }, [selectedChat, user]);
+
+  const handleConfirmUpload = useCallback(async (caption: string) => {
+    if (!pendingFile || !selectedChat || !user) return;
+
+    // Create optimistic message immediately
+    const tempId = Date.now();
+    const tempMessage: MessageType = {
+      id: tempId,
+      chatId: selectedChat.chat_id,
+      senderId: user.id,
+      receiverId: selectedChat.user_id,
+      content: caption || `Sent a file: ${pendingFile.name}`,
+      messageType: pendingFile.type.startsWith('image/') ? 'image' : 'file',
+      attachmentUrl: URL.createObjectURL(pendingFile), // Temporary local URL
+      attachmentName: pendingFile.name,
+      createdAt: new Date().toISOString(),
+      read: false,
+      isDeleted: false
+    } as MessageType & { isUploading?: boolean };
+
+    // Add optimistic message to UI
+    setMessages(prev => [...prev, tempMessage]);
+    setPendingFile(null);
+
     setIsLoading(true);
     try {
-      await uploadFile({
+      const result = await uploadFile({
         receiver_id: selectedChat.user_id,
         chat_id: selectedChat.chat_id,
-        file: file,
-        content: `Sent a file: ${file.name}`
+        file: pendingFile,
+        content: caption || `Sent a file: ${pendingFile.name}`
       });
+
+      // Replace optimistic message with real one
       await loadMessages(selectedChat.chat_id);
       await loadChats();
     } catch (err) {
+      // Remove optimistic message on error
+      setMessages(prev => prev.filter(m => m.id !== tempId));
       setError(err instanceof Error ? err.message : "Failed to upload file");
     } finally {
       setIsLoading(false);
-      // Reset file input
-      if (fileInputRef.current) fileInputRef.current.value = "";
     }
-  }, [selectedChat, user, loadMessages, loadChats]);
+  }, [pendingFile, selectedChat, user, loadMessages, loadChats]);
 
   const filteredChats = chats.filter((c) =>
     c.display_name.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  if (authLoading) return <LoadingScreen />;
 
   // Mobile: show one panel at a time
   if (isMobile) {
@@ -823,6 +1052,14 @@ const ChatPage = () => {
             messageInputRef={messageInputRef}
             fileInputRef={fileInputRef}
             handleFileSelect={handleFileSelect}
+            onMessageDeleted={handleMessageDeleted}
+            selectedMessages={selectedMessages}
+            setSelectedMessages={setSelectedMessages}
+            onDeleteMessagesBatch={handleDeleteMessagesBatch}
+            pendingFile={pendingFile}
+            setPendingFile={setPendingFile}
+            handleConfirmUpload={handleConfirmUpload}
+            isLoading={isLoading}
           />
         ) : (
           <ConversationList
@@ -872,6 +1109,14 @@ const ChatPage = () => {
           messageInputRef={messageInputRef}
           fileInputRef={fileInputRef}
           handleFileSelect={handleFileSelect}
+          onMessageDeleted={handleMessageDeleted}
+          selectedMessages={selectedMessages}
+          setSelectedMessages={setSelectedMessages}
+          onDeleteMessagesBatch={handleDeleteMessagesBatch}
+          pendingFile={pendingFile}
+          setPendingFile={setPendingFile}
+          handleConfirmUpload={handleConfirmUpload}
+          isLoading={isLoading}
         />
       </div>
     </div>

@@ -16,7 +16,7 @@ import {
 import {
   MessageSquare, Users, DollarSign, Shield, Search,
   Eye, Ban, AlertTriangle, ChevronRight, TrendingUp,
-  Activity, UserCheck, Trash2
+  Activity, UserCheck, Trash2, CheckCircle2
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
@@ -31,12 +31,16 @@ import {
   deleteUser,
   getAdminReports,
   updateReportStatus,
+  getVerificationRequests,
+  approveVerificationRequest,
+  rejectVerificationRequest,
+  VerificationRequest,
   AdminStats,
   AdminUser,
   AdminReport
 } from "@/lib/api";
 
-type AdminTab = "overview" | "users" | "chats" | "escrow" | "activity" | "reports";
+type AdminTab = "overview" | "users" | "chats" | "escrow" | "activity" | "reports" | "verifications";
 
 const AdminDashboard = () => {
   const { toast } = useToast();
@@ -51,6 +55,7 @@ const AdminDashboard = () => {
   const [escrowDeals, setEscrowDeals] = useState<any[]>([]);
   const [activities, setActivities] = useState<any[]>([]);
   const [reports, setReports] = useState<AdminReport[]>([]);
+  const [verificationRequests, setVerificationRequests] = useState<VerificationRequest[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState("all");
 
@@ -94,6 +99,9 @@ const AdminDashboard = () => {
       } else if (activeTab === "reports") {
         const reportsData = await getAdminReports();
         setReports(reportsData.reports);
+      } else if (activeTab === "verifications") {
+        const verificationsData = await getVerificationRequests(statusFilter === "all" ? "" : statusFilter);
+        setVerificationRequests(verificationsData);
       }
     } catch (err) {
       toast({
@@ -171,11 +179,41 @@ const AdminDashboard = () => {
     }
   };
 
+  const handleApproveVerification = async (requestId: number) => {
+    try {
+      await approveVerificationRequest(requestId);
+      toast({ title: "Verification Approved", description: "User has been verified successfully." });
+      loadData();
+    } catch (err) {
+      toast({
+        title: "Error",
+        description: err instanceof Error ? err.message : "Failed to approve verification",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleRejectVerification = async (requestId: number) => {
+    const adminNote = prompt("Enter reason for rejection (optional):");
+    try {
+      await rejectVerificationRequest(requestId, adminNote || undefined);
+      toast({ title: "Verification Rejected", description: "Request has been rejected." });
+      loadData();
+    } catch (err) {
+      toast({
+        title: "Error",
+        description: err instanceof Error ? err.message : "Failed to reject verification",
+        variant: "destructive"
+      });
+    }
+  };
+
   const tabs = [
     { id: "overview" as const, label: "Overview", icon: TrendingUp },
     { id: "users" as const, label: "Users", icon: Users, count: stats?.totalUsers },
     { id: "chats" as const, label: "Chats", icon: MessageSquare, count: stats?.totalChats },
     { id: "escrow" as const, label: "Escrow", icon: DollarSign, count: stats?.totalEscrowDeals },
+    { id: "verifications" as const, label: "Verifications", icon: CheckCircle2 },
     { id: "reports" as const, label: "Reports", icon: AlertTriangle },
     { id: "activity" as const, label: "Activity", icon: Activity },
   ];
@@ -243,16 +281,26 @@ const AdminDashboard = () => {
             <h1 className="text-2xl font-bold text-foreground capitalize">{activeTab}</h1>
             {activeTab !== "overview" && (
               <div className="flex gap-2">
-                {(activeTab === "users" || activeTab === "escrow") && (
+                {(activeTab === "users" || activeTab === "escrow" || activeTab === "verifications") && (
                   <Select value={statusFilter} onValueChange={setStatusFilter}>
                     <SelectTrigger className="w-32">
                       <SelectValue placeholder="All Status" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">All</SelectItem>
-                      <SelectItem value="active">Active</SelectItem>
-                      <SelectItem value="suspended">Suspended</SelectItem>
-                      {activeTab === "escrow" && <SelectItem value="completed">Completed</SelectItem>}
+                      {activeTab === "verifications" ? (
+                        <>
+                          <SelectItem value="pending">Pending</SelectItem>
+                          <SelectItem value="approved">Approved</SelectItem>
+                          <SelectItem value="rejected">Rejected</SelectItem>
+                        </>
+                      ) : (
+                        <>
+                          <SelectItem value="active">Active</SelectItem>
+                          <SelectItem value="suspended">Suspended</SelectItem>
+                          {activeTab === "escrow" && <SelectItem value="completed">Completed</SelectItem>}
+                        </>
+                      )}
                     </SelectContent>
                   </Select>
                 )}
@@ -550,6 +598,95 @@ const AdminDashboard = () => {
                                   onClick={() => handleUpdateReportStatus(report.id, "dismissed")}
                                 >
                                   Dismiss
+                                </Button>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))
+                )}
+              </div>
+            )}
+
+            {activeTab === "verifications" && (
+              <div className="space-y-3">
+                {verificationRequests.length === 0 ? (
+                  <div className="text-center py-10">
+                    <CheckCircle2 className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
+                    <p className="text-muted-foreground">No verification requests found.</p>
+                  </div>
+                ) : (
+                  verificationRequests.map((request) => (
+                    <Card key={request.id} className="bg-card border-border">
+                      <CardContent className="py-4">
+                        <div className="flex items-start justify-between mb-3">
+                          <div className="flex items-center gap-3">
+                            <Avatar className="h-10 w-10">
+                              <AvatarImage src={request.user?.avatarUrl} />
+                              <AvatarFallback>{request.user?.displayName?.[0] || '?'}</AvatarFallback>
+                            </Avatar>
+                            <div>
+                              <p className="font-medium text-card-foreground">
+                                {request.user?.displayName}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                @{request.user?.username} • {request.user?.email}
+                              </p>
+                            </div>
+                          </div>
+                          <Badge
+                            className={
+                              request.status === "pending" ? "bg-yellow-500/10 text-yellow-500" :
+                                request.status === "approved" ? "bg-green-500/10 text-green-500" :
+                                  "bg-red-500/10 text-red-500"
+                            }
+                          >
+                            {request.status}
+                          </Badge>
+                        </div>
+                        <div className="bg-secondary/50 p-3 rounded-md mb-4">
+                          <div className="flex justify-between text-sm mb-1">
+                            <span className="text-muted-foreground">Payment Amount:</span>
+                            <span className="font-medium text-card-foreground">₹{request.paymentAmount}</span>
+                          </div>
+                          <div className="flex justify-between text-sm">
+                            <span className="text-muted-foreground">Submitted:</span>
+                            <span className="text-card-foreground">
+                              {new Date(request.createdAt).toLocaleDateString()}
+                            </span>
+                          </div>
+                        </div>
+                        {request.adminNote && (
+                          <div className="p-3 bg-red-500/10 rounded-md mb-4">
+                            <p className="text-sm font-medium text-red-500">Admin Note:</p>
+                            <p className="text-sm text-muted-foreground mt-1">{request.adminNote}</p>
+                          </div>
+                        )}
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs text-muted-foreground">
+                            Request ID: #{request.id}
+                          </span>
+                          <div className="flex gap-2">
+                            {request.status === "pending" && (
+                              <>
+                                <Button
+                                  variant="default"
+                                  size="sm"
+                                  className="h-8"
+                                  onClick={() => handleApproveVerification(request.id)}
+                                >
+                                  <CheckCircle2 className="h-4 w-4 mr-1" />
+                                  Approve
+                                </Button>
+                                <Button
+                                  variant="destructive"
+                                  size="sm"
+                                  className="h-8"
+                                  onClick={() => handleRejectVerification(request.id)}
+                                >
+                                  Reject
                                 </Button>
                               </>
                             )}

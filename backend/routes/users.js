@@ -22,7 +22,7 @@ const upload = multer({
 router.get('/', auth, adminOnly, async (req, res) => {
     try {
         const users = await prisma.user.findMany({
-            select: { id: true, username: true, email: true, displayName: true, avatarUrl: true, role: true, status: true, createdAt: true },
+            select: { id: true, username: true, email: true, displayName: true, avatarUrl: true, role: true, status: true, verified: true, createdAt: true },
             orderBy: { createdAt: 'desc' },
         });
         res.json(users);
@@ -53,7 +53,7 @@ router.get('/search', auth, async (req, res) => {
                     }
                 ]
             },
-            select: { id: true, username: true, displayName: true, avatarUrl: true },
+            select: { id: true, username: true, displayName: true, avatarUrl: true, verified: true },
             take: 10
         });
 
@@ -64,34 +64,59 @@ router.get('/search', auth, async (req, res) => {
     }
 });
 
-// GET /api/users/:id - Get user profile
+// GET /api/users/:id - Get user profile with rating
 router.get('/:id', auth, async (req, res) => {
     try {
+        const userId = parseInt(req.params.id);
         const user = await prisma.user.findUnique({
-            where: { id: parseInt(req.params.id) },
-            select: { id: true, username: true, email: true, displayName: true, bio: true, avatarUrl: true, socialLinks: true, role: true, status: true, createdAt: true },
+            where: { id: userId },
+            select: {
+                id: true,
+                username: true,
+                email: true,
+                displayName: true,
+                bio: true,
+                avatarUrl: true,
+                socialLinks: true,
+                role: true,
+                status: true,
+                verified: true,
+                createdAt: true,
+                ratingsReceived: {
+                    select: { rating: true }
+                }
+            },
         });
 
         if (!user) {
             return res.status(404).json({ error: 'User not found.' });
         }
 
-        res.json(user);
+        const ratings = user.ratingsReceived.map(r => r.rating);
+        const avgRating = ratings.length > 0 ? (ratings.reduce((a, b) => a + b, 0) / ratings.length).toFixed(1) : "0.0";
+
+        res.json({
+            ...user,
+            averageRating: parseFloat(avgRating),
+            ratingCount: ratings.length,
+            ratingsReceived: undefined
+        });
     } catch (err) {
         console.error('Get user error:', err);
         res.status(500).json({ error: 'Server error.' });
     }
 });
 
-// GET /api/users/profile/:id - Get detailed user profile
+// GET /api/users/profile/:id - Get detailed user profile with rating
 router.get('/profile/:id', auth, async (req, res) => {
     try {
-        if (req.user.id !== parseInt(req.params.id) && req.user.role !== 'admin') {
+        const userId = parseInt(req.params.id);
+        if (req.user.id !== userId && req.user.role !== 'admin') {
             return res.status(403).json({ error: 'Not authorized.' });
         }
 
         const user = await prisma.user.findUnique({
-            where: { id: parseInt(req.params.id) },
+            where: { id: userId },
             select: {
                 id: true,
                 username: true,
@@ -101,9 +126,13 @@ router.get('/profile/:id', auth, async (req, res) => {
                 avatarUrl: true,
                 role: true,
                 status: true,
+                verified: true,
                 telegramId: true,
                 socialLinks: true,
-                createdAt: true
+                createdAt: true,
+                ratingsReceived: {
+                    select: { rating: true }
+                }
             },
         });
 
@@ -111,7 +140,15 @@ router.get('/profile/:id', auth, async (req, res) => {
             return res.status(404).json({ error: 'User not found.' });
         }
 
-        res.json(user);
+        const ratings = user.ratingsReceived.map(r => r.rating);
+        const avgRating = ratings.length > 0 ? (ratings.reduce((a, b) => a + b, 0) / ratings.length).toFixed(1) : "0.0";
+
+        res.json({
+            ...user,
+            averageRating: parseFloat(avgRating),
+            ratingCount: ratings.length,
+            ratingsReceived: undefined
+        });
     } catch (err) {
         console.error('Get profile error:', err);
         res.status(500).json({ error: 'Server error.' });
@@ -147,6 +184,7 @@ router.put('/profile/:id', auth, async (req, res) => {
                 avatarUrl: true,
                 role: true,
                 status: true,
+                verified: true,
                 telegramId: true,
                 socialLinks: true,
                 createdAt: true
@@ -226,6 +264,49 @@ router.put('/:id/avatar', auth, upload.single('avatar'), async (req, res) => {
     } catch (err) {
         console.error('Avatar upload error:', err);
         res.status(500).json({ error: 'Upload failed.' });
+    }
+});
+
+// POST /api/users/rate - Rate a user
+router.post('/rate', auth, async (req, res) => {
+    try {
+        const { reviewedId, rating, comment } = req.body;
+
+        if (!reviewedId || !rating) {
+            return res.status(400).json({ error: "Missing required fields." });
+        }
+
+        if (req.user.id === parseInt(reviewedId)) {
+            return res.status(400).json({ error: "You cannot rate yourself." });
+        }
+
+        const ratingVal = parseInt(rating);
+        if (ratingVal < 1 || ratingVal > 5) {
+            return res.status(400).json({ error: "Rating must be between 1 and 5." });
+        }
+
+        const ratingObj = await prisma.rating.upsert({
+            where: {
+                reviewerId_reviewedId: {
+                    reviewerId: req.user.id,
+                    reviewedId: parseInt(reviewedId)
+                }
+            },
+            update: { rating: ratingVal, comment: comment || null },
+            create: {
+                reviewerId: req.user.id,
+                reviewedId: parseInt(reviewedId),
+                rating: ratingVal,
+                comment: comment || null
+            }
+        });
+
+        await prisma.activityLog.create({ data: { userId: req.user.id, action: 'Rated user', details: `User ID: ${reviewedId}, Rating: ${ratingVal}` } });
+
+        res.json(ratingObj);
+    } catch (err) {
+        console.error('Rate user error:', err);
+        res.status(500).json({ error: 'Server error.' });
     }
 });
 

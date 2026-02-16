@@ -50,8 +50,11 @@ export interface AuthUser {
   avatarUrl?: string;
   role: string;
   status: string;
+  verified?: boolean;
   socialLinks?: { platform: string; url: string }[];
   createdAt: string;
+  averageRating?: number;
+  ratingCount?: number;
 }
 
 export interface AuthResponse {
@@ -100,6 +103,17 @@ export function getUser(id: number): Promise<AuthUser> {
 
 export function searchUsers(query: string): Promise<AuthUser[]> {
   return apiFetch<AuthUser[]>(`/api/users/search?q=${encodeURIComponent(query)}`);
+}
+
+export function rateUser(data: {
+  reviewedId: number;
+  rating: number;
+  comment?: string;
+}): Promise<any> {
+  return apiFetch("/api/users/rate", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
 }
 
 export function getAllUsers(): Promise<AuthUser[]> {
@@ -154,6 +168,7 @@ export interface Message {
   content: string;
   messageType: string;
   read: boolean;
+  isDeleted?: boolean;
   createdAt: string;
   attachmentUrl?: string;
   attachmentName?: string;
@@ -171,6 +186,7 @@ export interface Chat {
   avatar_url?: string;
   username: string;
   unread_count: number;
+  verified: boolean;
 }
 
 // ============ Moderation API ============
@@ -222,6 +238,19 @@ export function sendMessage(data: {
   return apiFetch<Message>("/api/messages", {
     method: "POST",
     body: JSON.stringify(data),
+  });
+}
+
+export function deleteMessage(messageId: number): Promise<{ success: boolean }> {
+  return apiFetch<{ success: boolean }>(`/api/messages/${messageId}`, {
+    method: "DELETE",
+  });
+}
+
+export function deleteMessagesBatch(messageIds: number[]): Promise<any> {
+  return apiFetch("/api/messages/batch-delete", {
+    method: "POST",
+    body: JSON.stringify({ ids: messageIds }),
   });
 }
 
@@ -513,5 +542,56 @@ export function updateEscrowDeal(
   return apiFetch<EscrowDeal>(`/api/escrow/${dealId}`, {
     method: "PUT",
     body: JSON.stringify(data),
+  });
+}
+
+// ============ Verification API ============
+
+export interface VerificationRequest {
+  id: number;
+  userId: number;
+  status: string; // pending, approved, rejected
+  paymentAmount: number;
+  paymentProof?: string;
+  adminNote?: string;
+  createdAt: string;
+  reviewedAt?: string;
+  user?: AuthUser;
+}
+
+export function applyForVerification(data: { paymentProof?: string }): Promise<VerificationRequest> {
+  return apiFetch<VerificationRequest>("/api/verification/apply", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export function getVerificationStatus(): Promise<VerificationRequest | null> {
+  return apiFetch<VerificationRequest | null>("/api/verification/status");
+}
+
+export function getVerificationFee(): Promise<{ fee: number; currency: string }> {
+  return apiFetch<{ fee: number; currency: string }>("/api/verification/fee");
+}
+
+// Admin functions
+export function getVerificationRequests(status?: string): Promise<VerificationRequest[]> {
+  const query = status ? `?status=${status}` : '';
+  return apiFetch<VerificationRequest[]>(`/api/verification/requests${query}`);
+}
+
+export function approveVerificationRequest(requestId: number): Promise<{ message: string }> {
+  return apiFetch<{ message: string }>(`/api/verification/requests/${requestId}/approve`, {
+    method: "PUT",
+  });
+}
+
+export function rejectVerificationRequest(
+  requestId: number,
+  adminNote?: string
+): Promise<{ message: string }> {
+  return apiFetch<{ message: string }>(`/api/verification/requests/${requestId}/reject`, {
+    method: "PUT",
+    body: JSON.stringify({ adminNote }),
   });
 }

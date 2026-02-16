@@ -12,6 +12,7 @@ import messageRoutes from './routes/messages.js';
 import adminRoutes from './routes/admin.js';
 import escrowRoutes from './routes/escrow.js';
 import moderationRoutes from './routes/moderation.js';
+import verificationRoutes from './routes/verification.js';
 import setupSocket from './socket/chat.js';
 
 dotenv.config();
@@ -67,6 +68,7 @@ app.use('/api/messages', messageRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/escrow', escrowRoutes);
 app.use('/api/moderation', moderationRoutes);
+app.use('/api/verification', verificationRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

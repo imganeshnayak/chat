@@ -14,6 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { getEscrowDeals, createEscrowDeal, releaseEscrowPayment, EscrowDeal } from "@/lib/api";
 import { socketService } from "@/lib/socket";
+import LoadingScreen from "@/components/ui/LoadingScreen";
 
 function formatCurrency(n: number) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n);
@@ -170,12 +171,8 @@ const EscrowPage = () => {
     }
   };
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <p className="text-muted-foreground">Loading escrow deals...</p>
-      </div>
-    );
+  if (authLoading || (isLoading && deals.length === 0)) {
+    return <LoadingScreen />;
   }
 
   return (

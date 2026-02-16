@@ -46,6 +46,12 @@ class SocketService {
         return () => { this.socket?.off("messagesRead", callback); };
     }
 
+    onMessageDeleted(callback: (data: { messageId: number; chatId: string }) => void) {
+        if (!this.socket) return;
+        this.socket.on("messageDeleted", callback);
+        return () => { this.socket?.off("messageDeleted", callback); };
+    }
+
     disconnect() {
         if (this.socket) {
             this.socket.disconnect();

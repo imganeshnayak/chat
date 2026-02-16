@@ -5,13 +5,14 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, Share2, Copy, Mail, Phone, MessageSquare, Twitter, Instagram, Linkedin, Github, Globe, Plus, Trash2, ExternalLink } from "lucide-react";
+import { ArrowLeft, Share2, Copy, Mail, Phone, MessageSquare, Twitter, Instagram, Linkedin, Github, Globe, Plus, Trash2, ExternalLink, Star, CheckCircle2 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { getUser, updateUserProfile, uploadAvatar, AuthUser } from "@/lib/api";
+import { getUser, updateUserProfile, uploadAvatar, rateUser, AuthUser, applyForVerification, getVerificationStatus, getVerificationFee, VerificationRequest } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { Camera, Save, X, Edit2 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import LoadingScreen from "@/components/ui/LoadingScreen";
 import {
   Select,
   SelectContent,
@@ -19,6 +20,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 const PLATFORMS = [
   { id: "twitter", name: "Twitter", icon: <Twitter className="h-4 w-4" /> },
@@ -55,17 +62,12 @@ const ProfilePage = () => {
     role: "",
     socialLinks: [] as { platform: string; url: string }[]
   });
-
-  useEffect(() => {
-    if (!currentUser && !authLoading) {
-      navigate("/login");
-      return;
-    }
-
-    if (currentUser) {
-      loadUser();
-    }
-  }, [userId, currentUser, authLoading, navigate]);
+  const [isRatingDialogOpen, setIsRatingDialogOpen] = useState(false);
+  const [rating, setRating] = useState(5);
+  const [isVerificationDialogOpen, setIsVerificationDialogOpen] = useState(false);
+  const [verificationRequest, setVerificationRequest] = useState<VerificationRequest | null>(null);
+  const [verificationFee, setVerificationFee] = useState(109);
+  const [isApplying, setIsApplying] = useState(false);
 
   const loadUser = async () => {
     setIsLoading(true);
@@ -91,13 +93,30 @@ const ProfilePage = () => {
     }
   };
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <p className="text-muted-foreground">Loading...</p>
-      </div>
-    );
-  }
+  const loadVerificationData = async () => {
+    try {
+      const [status, feeData] = await Promise.all([
+        getVerificationStatus(),
+        getVerificationFee()
+      ]);
+      setVerificationRequest(status);
+      setVerificationFee(feeData.fee);
+    } catch (err) {
+      console.error('Load verification data error:', err);
+    }
+  };
+
+  useEffect(() => {
+    if (!authLoading) {
+      loadUser();
+      if (!userId) {
+        // Only load verification data for own profile
+        loadVerificationData();
+      }
+    }
+  }, [userId, currentUser, authLoading]);
+
+  if (authLoading || (isLoading && !user)) return <LoadingScreen />;
 
   if (!user || error) {
     return (
@@ -109,6 +128,7 @@ const ProfilePage = () => {
 
   const isOwnProfile = user.id === currentUser?.id;
   const profileLink = `${window.location.origin}/profile/${user.id}`;
+
 
   const copyLink = () => {
     navigator.clipboard.writeText(profileLink);
@@ -127,6 +147,18 @@ const ProfilePage = () => {
       toast({ title: "Error", description: err instanceof Error ? err.message : "Failed to update profile", variant: "destructive" });
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleRateUser = async () => {
+    if (!user) return;
+    try {
+      await rateUser({ reviewedId: user.id, rating: rating });
+      toast({ title: "Rating Submitted", description: `You rated ${user.displayName} ${rating} stars.` });
+      setIsRatingDialogOpen(false);
+      loadUser(); // Refresh to show new rating
+    } catch (err) {
+      toast({ title: "Error", description: err instanceof Error ? err.message : "Failed to submit rating", variant: "destructive" });
     }
   };
 
@@ -166,6 +198,27 @@ const ProfilePage = () => {
     const newLinks = [...editForm.socialLinks];
     newLinks[index] = { ...newLinks[index], [field]: value };
     setEditForm({ ...editForm, socialLinks: newLinks });
+  };
+
+  const handleApplyForVerification = async () => {
+    setIsApplying(true);
+    try {
+      const request = await applyForVerification({});
+      setVerificationRequest(request);
+      setIsVerificationDialogOpen(false);
+      toast({
+        title: "Application Submitted!",
+        description: "Your verification request has been submitted for review."
+      });
+    } catch (err) {
+      toast({
+        title: "Error",
+        description: err instanceof Error ? err.message : "Failed to submit verification request",
+        variant: "destructive"
+      });
+    } finally {
+      setIsApplying(false);
+    }
   };
 
   return (
@@ -291,10 +344,23 @@ const ProfilePage = () => {
               </div>
             ) : (
               <div className="text-center">
-                <h2 className="text-xl font-bold text-card-foreground">{user.displayName}</h2>
+                <div className="flex items-center gap-2 justify-center">
+                  <h2 className="text-xl font-bold text-card-foreground">{user.displayName}</h2>
+                  {user.verified && (
+                    <img src="/verified-badge.svg" alt="Verified" className="h-7 w-7" title="Verified Account" />
+                  )}
+                </div>
                 <Badge className={`mt-2 ${user.role === "admin" ? "bg-accent text-accent-foreground" : "bg-primary text-primary-foreground"}`}>
                   {user.role.charAt(0).toUpperCase() + user.role.slice(1)}
                 </Badge>
+
+                {user.averageRating !== undefined && user.averageRating > 0 && (
+                  <div className="mt-3 flex items-center justify-center gap-1 text-sm font-medium">
+                    <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
+                    <span>{user.averageRating}</span>
+                    <span className="text-muted-foreground text-xs">({user.ratingCount} ratings)</span>
+                  </div>
+                )}
 
                 {user.bio && (
                   <p className="mt-4 text-sm text-muted-foreground whitespace-pre-wrap">{user.bio}</p>
@@ -353,11 +419,16 @@ const ProfilePage = () => {
                     </Button>
                   )}
                   {!isOwnProfile && (
-                    <Link to={`/chat?userId=${user.id}`}>
-                      <Button className="w-full shadow-lg shadow-primary/20">
-                        <MessageSquare className="mr-2 h-4 w-4" /> Send message
+                    <>
+                      <Link to={`/chat?userId=${user.id}`}>
+                        <Button className="w-full shadow-lg shadow-primary/20">
+                          <MessageSquare className="mr-2 h-4 w-4" /> Send message
+                        </Button>
+                      </Link>
+                      <Button variant="outline" className="w-full" onClick={() => setIsRatingDialogOpen(true)}>
+                        <Star className="mr-2 h-4 w-4 text-yellow-400" /> Rate {user.displayName}
                       </Button>
-                    </Link>
+                    </>
                   )}
                   <Button variant="ghost" className="w-full text-muted-foreground hover:text-foreground" onClick={copyLink}>
                     <Share2 className="mr-2 h-4 w-4" /> {isOwnProfile ? "Share My Profile" : `Share ${user.displayName}'s profile`}
@@ -380,6 +451,36 @@ const ProfilePage = () => {
           </CardContent>
         </Card>
       </div>
+
+      {/* Rating Dialog */}
+      <Dialog open={isRatingDialogOpen} onOpenChange={setIsRatingDialogOpen}>
+        <DialogContent className="bg-card border-border sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Rate {user.displayName}</DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col items-center gap-6 py-6">
+            <div className="flex gap-2">
+              {[1, 2, 3, 4, 5].map((s) => (
+                <button
+                  key={s}
+                  onClick={() => setRating(s)}
+                  className={`p-1 transition-transform hover:scale-110 ${s <= rating ? "text-yellow-400" : "text-muted-foreground"
+                    }`}
+                >
+                  <Star className={`h-10 w-10 ${s <= rating ? "fill-current" : ""}`} />
+                </button>
+              ))}
+            </div>
+            <p className="text-sm text-muted-foreground">Select a star rating from 1 to 5</p>
+            <Button
+              className="w-full"
+              onClick={handleRateUser}
+            >
+              Submit Rating
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

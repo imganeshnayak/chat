@@ -27,7 +27,7 @@ router.get('/chats/list', auth, async (req, res) => {
         const messages = await prisma.message.findMany({
             where: { OR: [{ senderId: req.user.id }, { receiverId: req.user.id }] },
             orderBy: { createdAt: 'desc' },
-            include: { sender: { select: { id: true, displayName: true, avatarUrl: true, username: true } }, receiver: { select: { id: true, displayName: true, avatarUrl: true, username: true } } },
+            include: { sender: { select: { id: true, displayName: true, avatarUrl: true, username: true, verified: true } }, receiver: { select: { id: true, displayName: true, avatarUrl: true, username: true, verified: true } } },
         });
 
         // Group by chatId and get latest message per chat
@@ -47,6 +47,7 @@ router.get('/chats/list', auth, async (req, res) => {
                     avatar_url: otherUser.avatarUrl,
                     username: otherUser.username,
                     unread_count: unreadCount,
+                    verified: otherUser.verified || false,
                 });
             }
         }
@@ -256,6 +257,99 @@ router.delete('/chat/:chatId', auth, async (req, res) => {
         res.json({ message: "Chat history cleared successfully." });
     } catch (err) {
         console.error('Clear history error:', err);
+        res.status(500).json({ error: 'Server error.' });
+    }
+});
+
+// POST /api/messages/batch-delete - Delete multiple messages
+router.post('/batch-delete', auth, async (req, res) => {
+    try {
+        const { ids } = req.body;
+        if (!Array.isArray(ids) || ids.length === 0) {
+            return res.status(400).json({ error: "Invalid message IDs." });
+        }
+
+        // Find all messages to ensure they belong to the user
+        const messages = await prisma.message.findMany({
+            where: {
+                id: { in: ids },
+                senderId: req.user.id
+            }
+        });
+
+        if (messages.length === 0) {
+            return res.status(404).json({ error: "No valid messages found to delete." });
+        }
+
+        const validIds = messages.map(m => m.id);
+        const chatId = messages[0].chatId;
+
+        // Perform soft delete
+        await prisma.message.updateMany({
+            where: { id: { in: validIds } },
+            data: {
+                isDeleted: true,
+                content: "This message was deleted",
+                attachmentUrl: null,
+                attachmentName: null
+            }
+        });
+
+        const io = req.app.get('io');
+        if (io) {
+            io.to(chatId).emit('messagesDeleted', {
+                messageIds: validIds,
+                chatId: chatId
+            });
+        }
+
+        res.json({ success: true, count: validIds.length });
+    } catch (err) {
+        console.error('Batch delete error:', err);
+        res.status(500).json({ error: 'Server error.' });
+    }
+});
+
+// DELETE /api/messages/:id - Delete (soft delete) an individual message
+router.delete('/:id', auth, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const messageId = parseInt(id);
+
+        const message = await prisma.message.findUnique({
+            where: { id: messageId }
+        });
+
+        if (!message) {
+            return res.status(404).json({ error: "Message not found." });
+        }
+
+        if (message.senderId !== req.user.id) {
+            return res.status(403).json({ error: "You can only delete your own messages." });
+        }
+
+        // Soft delete: keep the record but mark it as deleted
+        const updatedMessage = await prisma.message.update({
+            where: { id: messageId },
+            data: {
+                isDeleted: true,
+                content: "This message was deleted",
+                attachmentUrl: null,
+                attachmentName: null
+            }
+        });
+
+        const io = req.app.get('io');
+        if (io) {
+            io.to(message.chatId).emit('messageDeleted', {
+                messageId: messageId,
+                chatId: message.chatId
+            });
+        }
+
+        res.json({ success: true, message: "Message deleted." });
+    } catch (err) {
+        console.error('Delete message error:', err);
         res.status(500).json({ error: 'Server error.' });
     }
 });

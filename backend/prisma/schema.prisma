@@ -19,6 +19,7 @@ model User {
   status      String    @default("active")
   telegramId  String?   @map("telegram_id")
   socialLinks Json?     @default("[]") @map("social_links")
+  verified    Boolean   @default(false)
   createdAt   DateTime  @default(now()) @map("created_at")
   updatedAt   DateTime  @updatedAt @map("updated_at")
 
@@ -29,8 +30,11 @@ model User {
   vendorDeals      EscrowDeal[]  @relation("VendorDeals")
   reportsCreated   Report[]      @relation("ReportsCreated")
   reportsReceived  Report[]      @relation("ReportsReceived")
-  blockedUsers     BlockedUser[] @relation("BlockingUser")
-  blockedBy        BlockedUser[] @relation("BlockedByUser")
+  blockedUsers         BlockedUser[] @relation("BlockingUser")
+  blockedBy            BlockedUser[] @relation("BlockedByUser")
+  ratingsGiven         Rating[]      @relation("RatingsGiven")
+  ratingsReceived      Rating[]      @relation("RatingsReceived")
+  verificationRequests VerificationRequest[]
 
   @@map("users")
 }
@@ -45,6 +49,7 @@ model Message {
   attachmentUrl  String?  @map("attachment_url")
   attachmentName String?  @map("attachment_name")
   read           Boolean  @default(false)
+  isDeleted      Boolean  @default(false) @map("is_deleted")
   createdAt      DateTime @default(now()) @map("created_at")
 
   sender   User @relation("SentMessages", fields: [senderId], references: [id])
@@ -52,6 +57,22 @@ model Message {
 
   @@map("messages")
 }
+
+model Rating {
+  id         Int      @id @default(autoincrement())
+  reviewerId Int      @map("reviewer_id")
+  reviewedId Int      @map("reviewed_id")
+  rating     Int      // 1 to 5
+  comment    String?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  reviewer   User     @relation("RatingsGiven", fields: [reviewerId], references: [id])
+  reviewed   User     @relation("RatingsReceived", fields: [reviewedId], references: [id])
+
+  @@unique([reviewerId, reviewedId])
+  @@map("ratings")
+}
+
 
 model Report {
   id          Int      @id @default(autoincrement())
@@ -125,3 +146,19 @@ model EscrowTransaction {
 
   @@map("escrow_transactions")
 }
+
+model VerificationRequest {
+  id            Int       @id @default(autoincrement())
+  userId        Int       @map("user_id")
+  status        String    @default("pending") // pending, approved, rejected
+  paymentAmount Float     @map("payment_amount")
+  paymentProof  String?   @map("payment_proof") // Optional URL to payment screenshot
+  adminNote     String?   @map("admin_note") // Admin's reason for approval/rejection
+  createdAt     DateTime  @default(now()) @map("created_at")
+  reviewedAt    DateTime? @map("reviewed_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("verification_requests")
+}
+

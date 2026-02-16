@@ -13,6 +13,7 @@ import ProfilePage from "./pages/ProfilePage";
 import EscrowPage from "./pages/EscrowPage";
 import AdminDashboard from "./pages/AdminDashboard";
 import AdminChatView from "./pages/AdminChatView";
+import SettingsPage from "./pages/SettingsPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -31,6 +32,7 @@ const MainContent = () => {
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/profile/:userId" element={<ProfilePage />} />
         <Route path="/escrow" element={<EscrowPage />} />
+        <Route path="/settings" element={<SettingsPage />} />
         <Route path="/admin" element={<AdminDashboard />} />
         <Route path="/admin/chats/:chatId" element={<AdminChatView />} />
         <Route path="*" element={<NotFound />} />

@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- Circular background -->
+  <circle cx="50" cy="50" r="48" fill="#FFB800" stroke="#FFA500" stroke-width="2"/>
+  
+  <!-- Badge shape (star-like) -->
+ <path d="M50 10 L58 38 L88 38 L64 56 L72 84 L50 68 L28 84 L36 56 L12 38 L42 38 Z" fill="#FFF8DC" opacity="0.9"/>
+  
+  <!-- Checkmark -->
+  <path d="M35 50 L45 62 L68 35" fill="none" stroke="#FFB800" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
