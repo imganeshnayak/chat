@@ -130,7 +130,7 @@ router.post('/', auth, async (req, res) => {
                 title,
                 description: description || '',
                 totalAmount: parseFloat(totalAmount),
-                status: 'active'
+                status: 'pending_payment'
             },
             include: {
                 client: {
