@@ -149,15 +149,34 @@ router.post('/', auth, async (req, res) => {
             data: { userId: req.user.id, action: 'Created escrow deal', details: title }
         });
 
-        // Notify the vendor about the new deal
-        const io = req.app.get('io');
-        sendUserNotification(
-            io,
-            requestedVendorId,
-            '📋 New Escrow Deal',
-            `${deal.client.displayName || 'A client'} created a deal "${title}" for ₹${parseFloat(totalAmount).toLocaleString('en-IN')}. Awaiting payment.`,
-            'info'
-        );
+        // Create a system message in the chat
+        const systemMessage = await prisma.message.create({
+            data: {
+                senderId: currentUserId,
+                receiverId: requestedVendorId,
+                chatId,
+                content: `📋 New Escrow Deal: "${title}" for ₹${parseFloat(totalAmount).toLocaleString('en-IN')}. Awaiting payment.`,
+                messageType: 'escrow_created'
+            },
+            include: {
+                sender: {
+                    select: { displayName: true, avatarUrl: true, username: true }
+                }
+            }
+        });
+
+        const socketResult = {
+            ...systemMessage,
+            sender_name: systemMessage.sender.displayName,
+            sender_avatar: systemMessage.sender.avatarUrl,
+            sender_username: systemMessage.sender.username,
+        };
+
+        if (io) {
+            io.to(chatId).emit('newMessage', socketResult);
+            // Also notify receiver's personal room
+            io.to(`user_${requestedVendorId}`).emit('newMessage', socketResult);
+        }
 
         res.status(201).json(deal);
     } catch (err) {
@@ -197,6 +216,7 @@ router.post('/:id/release', auth, async (req, res) => {
         // Perform updates in a transaction
         // Use an atomic update first to ensure we don't exceed 100%
         // Using updateMany allows us to conditionally fail if releasedPercent + percent > 100
+        const io = req.app.get('io');
         let updatedDeal, vendorAmount;
         const platformFee = 0; // Assuming 0 for now as per previous logic, or calculate if needed
 
@@ -284,6 +304,33 @@ router.post('/:id/release', auth, async (req, res) => {
                     }
                 });
 
+                // 8. Create a system message in the chat
+                const systemMessage = await tx.message.create({
+                    data: {
+                        senderId: req.user.id,
+                        receiverId: deal.vendorId,
+                        chatId: deal.chatId,
+                        content: `💰 Funds Released: ₹${vendorAmount.toLocaleString('en-IN')} (${userPercent}%) for "${deal.title}".`,
+                        messageType: 'escrow_released'
+                    },
+                    include: {
+                        sender: {
+                            select: { displayName: true, avatarUrl: true, username: true }
+                        }
+                    }
+                });
+
+                if (io) {
+                    const socketResult = {
+                        ...systemMessage,
+                        sender_name: systemMessage.sender.displayName,
+                        sender_avatar: systemMessage.sender.avatarUrl,
+                        sender_username: systemMessage.sender.username,
+                    };
+                    io.to(deal.chatId).emit('newMessage', socketResult);
+                    io.to(`user_${deal.vendorId}`).emit('newMessage', socketResult);
+                }
+
                 return currentDeal;
             });
 
@@ -296,8 +343,6 @@ router.post('/:id/release', auth, async (req, res) => {
             throw txErr;
         }
 
-        // Emit socket event for real-time update
-        const io = req.app.get('io');
         if (io) {
             io.to(deal.chatId).emit('escrowUpdate', updatedDeal);
             io.to(`user_${deal.vendorId}`).emit('escrowUpdate', updatedDeal);

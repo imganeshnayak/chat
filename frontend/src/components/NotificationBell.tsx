@@ -51,6 +51,9 @@ export default function NotificationBell() {
         });
 
         socket.on("admin:notification", (notification: Notification) => {
+            // Ignore if the sender is the current user
+            if (notification.sentById === user.id) return;
+
             setNotifications(prev => [notification, ...prev]);
 
             // Show toast based on type

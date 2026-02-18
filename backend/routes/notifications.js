@@ -182,7 +182,7 @@ router.delete('/:id', auth, async (req, res) => {
 // POST /api/notifications/broadcast — Admin only: send to all users
 router.post('/broadcast', auth, adminOnly, async (req, res) => {
     try {
-        const { title, message, type = 'info' } = req.body;
+        const { title, message, type = 'info', color } = req.body;
 
         if (!title?.trim() || !message?.trim()) {
             return res.status(400).json({ error: 'Title and message are required' });
@@ -198,6 +198,7 @@ router.post('/broadcast', auth, adminOnly, async (req, res) => {
                 title: title.trim(),
                 message: message.trim(),
                 type,
+                color,
                 sentBy: req.user.id
             },
             include: {
@@ -213,17 +214,21 @@ router.post('/broadcast', auth, adminOnly, async (req, res) => {
                 title: notification.title,
                 message: notification.message,
                 type: notification.type,
+                color: notification.color,
                 createdAt: notification.createdAt,
                 sentBy: notification.admin?.displayName || notification.admin?.username || 'Admin',
+                sentById: req.user.id, // Include sender ID for filtering
                 isRead: false
             });
         }
 
-        // Mirror broadcast as a message in Help Center for ALL active users
-        // Note: In a large production app, this would be done via a background job/worker
+        // Mirror broadcast as a message in Help Center for regular users
         try {
             const users = await prisma.user.findMany({
-                where: { status: 'active' },
+                where: {
+                    status: 'active',
+                    NOT: { role: 'admin' } // Fix: exclude admins instead of non-existent 'user' role
+                },
                 select: { id: true }
             });
 
@@ -235,17 +240,22 @@ router.post('/broadcast', auth, adminOnly, async (req, res) => {
                         senderId: req.user.id, // The admin who sent the broadcast
                         receiverId: user.id,
                         content: `📢 **${title}**\n\n${message}`,
-                        messageType: 'text'
+                        messageType: 'text',
+                        color: color // Pass the custom color to the message
                     }
                 });
 
                 // Emit new message via socket
                 if (io) {
-                    io.to(chatId).emit('newMessage', {
+                    const socketMsg = {
                         ...msg,
                         sender_name: "Admin",
                         sender_avatar: null // Use default system avatar
-                    });
+                    };
+
+                    io.to(chatId).emit('newMessage', socketMsg);
+                    // Also notify user's personal room to refresh their chat list/unread count
+                    io.to(`user_${user.id}`).emit('newMessage', socketMsg);
                 }
             }
         } catch (msgErr) {
@@ -311,7 +321,7 @@ export async function sendUserNotification(io, targetUserId, title, message, typ
                         senderId: admin.id,
                         receiverId: targetUserId,
                         content: `🔔 **${title}**\n\n${message}`,
-                        messageType: 'text'
+                        messageType: 'notification'
                     }
                 });
 

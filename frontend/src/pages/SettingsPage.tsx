@@ -25,7 +25,7 @@ const SettingsPage = () => {
     const { toast } = useToast();
     const { openCheckout } = useRazorpay();
     const [verificationRequest, setVerificationRequest] = useState<VerificationRequest | null>(null);
-    const [verificationFee, setVerificationFee] = useState(109);
+    const [verificationFee, setVerificationFee] = useState(0);
     const [isVerificationDialogOpen, setIsVerificationDialogOpen] = useState(false);
     const [isApplying, setIsApplying] = useState(false);
 
@@ -157,7 +157,7 @@ const SettingsPage = () => {
                         <CardTitle className="flex items-center gap-2">
                             Subscription & Verification
                             {user?.verified && (
-                                <img src="/verified-badge.svg" alt="Verified" className="h-5 w-5" title="Verified Account" />
+                                <img src="/verified-badge.svg" alt="Verified" className="h-8 w-8" title="Verified Account" />
                             )}
                         </CardTitle>
                         <CardDescription>

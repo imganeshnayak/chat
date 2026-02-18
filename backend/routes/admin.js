@@ -621,4 +621,52 @@ function getRelativeTime(date) {
     return `${Math.floor(hours / 24)}d ago`;
 }
 
+// GET /api/admin/settings - Get all system settings
+router.get('/settings', auth, adminOnly, async (req, res) => {
+    try {
+        const settings = await prisma.systemSetting.findMany();
+        const settingsMap = settings.reduce((acc, curr) => {
+            acc[curr.key] = curr.value;
+            return acc;
+        }, {});
+        res.json(settingsMap);
+    } catch (err) {
+        console.error('Get settings error:', err);
+        res.status(500).json({ error: 'Server error.' });
+    }
+});
+
+// PUT /api/admin/settings - Update/Create system settings
+router.post('/settings', auth, adminOnly, async (req, res) => {
+    try {
+        const { settings } = req.body;
+        if (!settings || typeof settings !== 'object') {
+            return res.status(400).json({ error: 'Invalid settings format.' });
+        }
+
+        const updates = Object.entries(settings).map(([key, value]) =>
+            prisma.systemSetting.upsert({
+                where: { key },
+                update: { value: String(value) },
+                create: { key, value: String(value) }
+            })
+        );
+
+        await Promise.all(updates);
+
+        await prisma.activityLog.create({
+            data: {
+                userId: req.user.id,
+                action: 'Updated system settings',
+                details: Object.keys(settings).join(', ')
+            }
+        });
+
+        res.json({ success: true });
+    } catch (err) {
+        console.error('Update settings error:', err);
+        res.status(500).json({ error: 'Server error.' });
+    }
+});
+
 export default router;

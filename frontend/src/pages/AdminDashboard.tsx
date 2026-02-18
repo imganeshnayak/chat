@@ -16,7 +16,8 @@ import {
 import {
   MessageSquare, Users, DollarSign, Shield, Search,
   Eye, Ban, AlertTriangle, ChevronRight, TrendingUp,
-  Activity, UserCheck, Trash2, CheckCircle2, LogOut, Wallet, Bell, Send
+  Activity, UserCheck, Trash2, CheckCircle2, LogOut, Wallet, Bell, Send,
+  IndianRupee, Settings, Loader2
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
@@ -39,6 +40,8 @@ import {
   updatePayoutStatus,
   broadcastNotification,
   getNotifications,
+  getSystemSettings,
+  updateSystemSettings,
   Notification,
   VerificationRequest,
   AdminStats,
@@ -47,7 +50,7 @@ import {
   PayoutRequest
 } from "@/lib/api";
 
-type AdminTab = "overview" | "users" | "chats" | "escrow" | "activity" | "reports" | "verifications" | "payouts" | "broadcast";
+type AdminTab = "overview" | "users" | "chats" | "escrow" | "activity" | "reports" | "verifications" | "payouts" | "broadcast" | "settings";
 
 const AdminDashboard = () => {
   const { toast } = useToast();
@@ -70,7 +73,10 @@ const AdminDashboard = () => {
   const [broadcastMessage, setBroadcastMessage] = useState("");
   const [broadcastType, setBroadcastType] = useState<"info" | "warning" | "success" | "alert">("info");
   const [isBroadcasting, setIsBroadcasting] = useState(false);
+  const [broadcastColor, setBroadcastColor] = useState("#4f46e5");
   const [sentNotifications, setSentNotifications] = useState<Notification[]>([]);
+  const [systemSettings, setSystemSettings] = useState<Record<string, string>>({ verification_fee: "" });
+  const [isSavingSettings, setIsSavingSettings] = useState(false);
 
   useEffect(() => {
     if (!user && !authLoading) {
@@ -125,6 +131,9 @@ const AdminDashboard = () => {
       } else if (activeTab === "payouts") {
         const payoutsData = await getAdminPayouts(1, 20, statusFilter === "all" ? "" : statusFilter);
         setPayouts(payoutsData.payouts);
+      } else if (activeTab === "settings") {
+        const settingsData = await getSystemSettings();
+        setSystemSettings(settingsData);
       }
     } catch (err) {
       toast({
@@ -254,6 +263,22 @@ const AdminDashboard = () => {
     }
   };
 
+  const handleSaveSettings = async () => {
+    setIsSavingSettings(true);
+    try {
+      await updateSystemSettings(systemSettings);
+      toast({ title: "Settings Saved", description: "Global configuration updated successfully." });
+    } catch (err) {
+      toast({
+        title: "Error",
+        description: err instanceof Error ? err.message : "Failed to save settings",
+        variant: "destructive"
+      });
+    } finally {
+      setIsSavingSettings(false);
+    }
+  };
+
   const handleLogout = () => {
     logout();
     navigate("/login");
@@ -263,12 +288,13 @@ const AdminDashboard = () => {
     { id: "overview" as const, label: "Overview", icon: TrendingUp },
     { id: "users" as const, label: "Users", icon: Users, count: stats?.totalUsers },
     { id: "chats" as const, label: "Chats", icon: MessageSquare, count: stats?.totalChats },
-    { id: "escrow" as const, label: "Escrow", icon: DollarSign, count: stats?.totalEscrowDeals },
+    { id: "escrow" as const, label: "Escrow", icon: IndianRupee, count: stats?.totalEscrowDeals },
     { id: "verifications" as const, label: "Verifications", icon: CheckCircle2 },
     { id: "payouts" as const, label: "Payouts", icon: Wallet },
     { id: "reports" as const, label: "Reports", icon: AlertTriangle },
     { id: "activity" as const, label: "Activity", icon: Activity },
     { id: "broadcast" as const, label: "Broadcast", icon: Bell },
+    { id: "settings" as const, label: "Settings", icon: Settings },
   ];
 
   if (isLoading && !stats) {
@@ -426,7 +452,7 @@ const AdminDashboard = () => {
                     </CardHeader>
                     <CardContent>
                       <div className="text-2xl font-bold text-card-foreground">
-                        ${stats.totalEscrowValue.toLocaleString()}
+                        ₹{stats.totalEscrowValue.toLocaleString('en-IN')}
                       </div>
                       <p className="text-xs text-muted-foreground mt-1">
                         In escrow
@@ -564,7 +590,7 @@ const AdminDashboard = () => {
                       </div>
                       <div className="flex justify-between text-sm mb-2">
                         <span className="text-muted-foreground">
-                          ${deal.totalAmount.toLocaleString()} total
+                          ₹{deal.totalAmount.toLocaleString('en-IN')} total
                         </span>
                         <span className="text-primary font-semibold">{deal.releasedPercent.toFixed(1)}% released</span>
                       </div>
@@ -905,6 +931,38 @@ const AdminDashboard = () => {
                         </div>
                       </div>
                       <div>
+                        <label className="text-sm font-medium mb-2 block">Theme Color</label>
+                        <div className="flex gap-2 flex-wrap">
+                          {[
+                            { name: "Indigo", hex: "#4f46e5" },
+                            { name: "Emerald", hex: "#10b981" },
+                            { name: "Amber", hex: "#f59e0b" },
+                            { name: "Rose", hex: "#f43f5e" },
+                            { name: "Violet", hex: "#8b5cf6" },
+                            { name: "Cyan", hex: "#06b6d4" },
+                            { name: "Slate", hex: "#475569" },
+                          ].map(c => (
+                            <button
+                              key={c.hex}
+                              type="button"
+                              onClick={() => setBroadcastColor(c.hex)}
+                              className={`h-8 w-8 rounded-full border-2 transition-all hover:scale-110 ${broadcastColor === c.hex ? "border-white ring-2 ring-primary ring-offset-2 ring-offset-background" : "border-transparent"}`}
+                              style={{ backgroundColor: c.hex }}
+                              title={c.name}
+                            />
+                          ))}
+                          <div className="relative flex items-center gap-2 ml-2">
+                            <Input
+                              type="color"
+                              value={broadcastColor}
+                              onChange={(e) => setBroadcastColor(e.target.value)}
+                              className="h-8 w-8 p-0 border-none bg-transparent cursor-pointer overflow-hidden rounded-full shadow-sm"
+                            />
+                            <span className="text-[10px] font-mono text-muted-foreground uppercase">{broadcastColor}</span>
+                          </div>
+                        </div>
+                      </div>
+                      <div>
                         <label className="text-sm font-medium mb-1 block">Title</label>
                         <Input
                           placeholder="e.g. System Maintenance"
@@ -930,7 +988,12 @@ const AdminDashboard = () => {
                         onClick={async () => {
                           setIsBroadcasting(true);
                           try {
-                            await broadcastNotification({ title: broadcastTitle.trim(), message: broadcastMessage.trim(), type: broadcastType });
+                            await broadcastNotification({
+                              title: broadcastTitle.trim(),
+                              message: broadcastMessage.trim(),
+                              type: broadcastType,
+                              color: broadcastColor
+                            });
                             toast({ title: "📢 Broadcast Sent!", description: `All users have been notified.` });
                             setBroadcastTitle("");
                             setBroadcastMessage("");
@@ -970,9 +1033,10 @@ const AdminDashboard = () => {
                         {sentNotifications.map(n => (
                           <Card key={n.id} className="p-4 bg-card border-border">
                             <div className="flex items-start gap-3">
-                              <span className="text-xl">
-                                {n.type === "info" ? "🔵" : n.type === "warning" ? "🟡" : n.type === "success" ? "🟢" : "🔴"}
-                              </span>
+                              <span
+                                className="h-6 w-6 rounded-full shrink-0 mt-0.5 border border-white/20 shadow-sm"
+                                style={{ backgroundColor: n.color || (n.type === 'info' ? '#3b82f6' : n.type === 'warning' ? '#f59e0b' : n.type === 'success' ? '#10b981' : '#ef4444') }}
+                              />
                               <div className="flex-1 min-w-0">
                                 <div className="flex justify-between items-start">
                                   <p className="font-semibold text-card-foreground">{n.title}</p>
@@ -994,10 +1058,75 @@ const AdminDashboard = () => {
                 </div>
               </div>
             )}
+
+            {activeTab === "settings" && (
+              <div className="space-y-6">
+                <div className="flex flex-col gap-1">
+                  <h2 className="text-2xl font-bold bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">Platform Settings</h2>
+                  <p className="text-muted-foreground text-sm flex items-center gap-2">
+                    <Activity className="h-3 w-3" /> Manage global configurations and transaction fees
+                  </p>
+                </div>
+
+                <div className="grid gap-6 max-w-2xl">
+                  <Card className="bg-card/50 border-border/50 backdrop-blur-md shadow-xl overflow-hidden rounded-2xl border">
+                    <CardHeader className="bg-secondary/20 border-b border-border/50 py-5">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-primary/10 rounded-xl">
+                          <CheckCircle2 className="h-5 w-5 text-primary" />
+                        </div>
+                        <div>
+                          <CardTitle className="text-lg font-bold">Verification System</CardTitle>
+                          <p className="text-xs text-muted-foreground">Configure verification badge costs</p>
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="p-6 space-y-6">
+                      <div className="space-y-3">
+                        <label className="text-sm font-semibold text-foreground/80 block">Verification Fee (INR)</label>
+                        <div className="relative group">
+                          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <IndianRupee className="h-4 w-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
+                          </div>
+                          <Input
+                            type="number"
+                            className="pl-10 h-12 bg-background/50 border-border/50 focus:border-primary/50 focus:ring-primary/20 rounded-xl transition-all"
+                            value={systemSettings.verification_fee}
+                            onChange={(e) => setSystemSettings(prev => ({ ...prev, verification_fee: e.target.value }))}
+                            placeholder="e.g. 600"
+                          />
+                        </div>
+                        <div className="bg-primary/5 border border-primary/10 rounded-lg p-3">
+                          <p className="text-xs text-primary/80 leading-relaxed italic">
+                            💡 This fee is charged one-time when a user applies for a Blue Verification Badge.
+                          </p>
+                        </div>
+                      </div>
+
+                      <Button
+                        onClick={handleSaveSettings}
+                        className="w-full h-11 rounded-xl shadow-lg shadow-primary/20 hover:shadow-primary/30 transition-all font-semibold"
+                        disabled={isSavingSettings}
+                      >
+                        {isSavingSettings ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Saving Settings...
+                          </>
+                        ) : (
+                          "Update Settings"
+                        )
+                        }
+                      </Button>
+                    </CardContent>
+                  </Card>
+                </div>
+              </div>
+            )}
           </ScrollArea>
         </div>
-      </div>
-    </div>
+      </div >
+    </div >
   );
 };
 

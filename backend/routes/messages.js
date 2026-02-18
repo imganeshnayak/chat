@@ -40,7 +40,7 @@ router.get('/chats/list', auth, async (req, res) => {
                 });
                 chatMap.set(msg.chatId, {
                     chat_id: msg.chatId,
-                    last_message: msg.content,
+                    last_message: msg.isViewOnce && !msg.isOpened ? (msg.messageType === 'image' || msg.messageType === 'file' ? "Photo" : "View Once Message") : msg.content,
                     last_message_time: msg.createdAt,
                     user_id: otherUser.id,
                     display_name: otherUser.displayName,
@@ -52,9 +52,9 @@ router.get('/chats/list', auth, async (req, res) => {
             }
         }
 
-        // Ensure "Admin" (Support Admin) is always in the list
+        // Ensure "Admin" (Support Admin) is always in the list for regular users
         const supportChatId = `support_${req.user.id}`;
-        if (!chatMap.has(supportChatId)) {
+        if (req.user.role !== 'admin' && !chatMap.has(supportChatId)) {
             const admin = await prisma.user.findFirst({
                 where: { role: 'admin', status: 'active' },
                 select: { id: true, username: true, displayName: true, avatarUrl: true, verified: true }
@@ -161,7 +161,14 @@ router.post('/', auth, async (req, res) => {
         }
 
         const message = await prisma.message.create({
-            data: { senderId: req.user.id, receiverId: parseInt(receiver_id), chatId: chat_id, content, messageType: message_type || 'text' },
+            data: {
+                senderId: req.user.id,
+                receiverId: parseInt(receiver_id),
+                chatId: chat_id,
+                content,
+                messageType: message_type || 'text',
+                isViewOnce: req.body.is_view_once === true || req.body.is_view_once === 'true'
+            },
             include: { sender: { select: { displayName: true, avatarUrl: true, username: true } } },
         });
 
@@ -236,6 +243,7 @@ router.post('/upload', auth, upload.single('file'), async (req, res) => {
                 messageType: 'file',
                 attachmentUrl: uploadResult.secure_url,
                 attachmentName: req.file.originalname,
+                isViewOnce: req.body.is_view_once === true || req.body.is_view_once === 'true'
             },
             include: { sender: { select: { displayName: true, avatarUrl: true, username: true } } },
         });
@@ -411,6 +419,64 @@ router.delete('/:id', auth, async (req, res) => {
         res.json({ success: true, message: "Message deleted." });
     } catch (err) {
         console.error('Delete message error:', err);
+        res.status(500).json({ error: 'Server error.' });
+    }
+});
+
+// PUT /api/messages/:id/open - Mark a view-once message as opened
+router.put('/:id/open', auth, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const messageId = parseInt(id);
+
+        const message = await prisma.message.findUnique({
+            where: { id: messageId }
+        });
+
+        if (!message) {
+            return res.status(404).json({ error: "Message not found." });
+        }
+
+        // Only the receiver can open the message
+        if (message.receiverId !== req.user.id) {
+            return res.status(403).json({ error: "Only the recipient can open this message." });
+        }
+
+        if (!message.isViewOnce) {
+            return res.status(400).json({ error: "This is not a view-once message." });
+        }
+
+        if (message.isOpened) {
+            return res.status(400).json({ error: "Message already viewed." });
+        }
+
+        // Mark as opened and mask content
+        const updatedMessage = await prisma.message.update({
+            where: { id: messageId },
+            data: {
+                isOpened: true,
+                content: "View Once message opened",
+                attachmentUrl: null,
+                attachmentName: null
+            },
+            include: { sender: { select: { displayName: true, avatarUrl: true, username: true } } }
+        });
+
+        const result = {
+            ...updatedMessage,
+            sender_name: updatedMessage.sender.displayName,
+            sender_avatar: updatedMessage.sender.avatarUrl,
+            sender_username: updatedMessage.sender.username,
+        };
+
+        const io = req.app.get('io');
+        if (io) {
+            io.to(message.chatId).emit('messageOpened', result);
+        }
+
+        res.json(result);
+    } catch (err) {
+        console.error('Open view-once message error:', err);
         res.status(500).json({ error: 'Server error.' });
     }
 });

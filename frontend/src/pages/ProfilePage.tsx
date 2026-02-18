@@ -66,7 +66,7 @@ const ProfilePage = () => {
   const [rating, setRating] = useState(5);
   const [isVerificationDialogOpen, setIsVerificationDialogOpen] = useState(false);
   const [verificationRequest, setVerificationRequest] = useState<VerificationRequest | null>(null);
-  const [verificationFee, setVerificationFee] = useState(109);
+  const [verificationFee, setVerificationFee] = useState(0);
   const [isApplying, setIsApplying] = useState(false);
 
   const loadUser = async () => {
@@ -352,7 +352,7 @@ const ProfilePage = () => {
                 <div className="flex items-center gap-2 justify-center">
                   <h2 className="text-xl font-bold text-card-foreground">{user.displayName}</h2>
                   {user.verified && (
-                    <img src="/verified-badge.svg" alt="Verified" className="h-7 w-7" title="Verified Account" />
+                    <img src="/verified-badge.svg" alt="Verified" className="h-9 w-9" title="Verified Account" />
                   )}
                 </div>
                 <Badge className={`mt-2 ${user.role === "admin" ? "bg-accent text-accent-foreground" : "bg-primary text-primary-foreground"}`}>

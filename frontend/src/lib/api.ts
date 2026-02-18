@@ -170,6 +170,9 @@ export interface Message {
   messageType: string;
   read: boolean;
   isDeleted?: boolean;
+  isViewOnce?: boolean;
+  isOpened?: boolean;
+  color?: string;
   createdAt: string;
   attachmentUrl?: string;
   attachmentName?: string;
@@ -236,6 +239,7 @@ export function sendMessage(data: {
   chat_id: string;
   content: string;
   message_type?: string;
+  is_view_once?: boolean;
 }): Promise<Message> {
   return apiFetch<Message>("/api/messages", {
     method: "POST",
@@ -246,6 +250,12 @@ export function sendMessage(data: {
 export function deleteMessage(messageId: number): Promise<{ success: boolean }> {
   return apiFetch<{ success: boolean }>(`/api/messages/${messageId}`, {
     method: "DELETE",
+  });
+}
+
+export function openViewOnceMessage(messageId: number): Promise<Message> {
+  return apiFetch<Message>(`/api/messages/${messageId}/open`, {
+    method: "PUT",
   });
 }
 
@@ -271,12 +281,14 @@ export async function uploadFile(data: {
   chat_id: string;
   file: File;
   content?: string;
+  is_view_once?: boolean;
 }): Promise<Message> {
   const formData = new FormData();
   formData.append("receiver_id", data.receiver_id.toString());
   formData.append("chat_id", data.chat_id);
   formData.append("file", data.file);
   if (data.content) formData.append("content", data.content);
+  if (data.is_view_once) formData.append("is_view_once", "true");
 
   const token = localStorage.getItem("authToken");
 
@@ -338,6 +350,17 @@ export interface AdminReport {
 
 export function getAdminReports(): Promise<{ reports: AdminReport[] }> {
   return apiFetch<{ reports: AdminReport[] }>("/api/admin/reports");
+}
+
+export function getSystemSettings(): Promise<Record<string, string>> {
+  return apiFetch<Record<string, string>>("/api/admin/settings");
+}
+
+export function updateSystemSettings(settings: Record<string, string | number>): Promise<{ success: boolean }> {
+  return apiFetch<{ success: boolean }>("/api/admin/settings", {
+    method: "POST",
+    body: JSON.stringify({ settings }),
+  });
 }
 
 export function updateReportStatus(reportId: number, status: string): Promise<any> {
@@ -752,8 +775,10 @@ export interface Notification {
   title: string;
   message: string;
   type: "info" | "warning" | "success" | "alert";
+  color?: string;
   createdAt: string;
   sentBy: string;
+  sentById?: number;
   isRead: boolean;
 }
 
@@ -783,6 +808,7 @@ export function broadcastNotification(data: {
   title: string;
   message: string;
   type: "info" | "warning" | "success" | "alert";
+  color?: string;
 }): Promise<{ success: boolean }> {
   return apiFetch<{ success: boolean }>("/api/notifications/broadcast", {
     method: "POST",

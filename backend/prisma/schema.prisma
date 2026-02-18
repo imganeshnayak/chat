@@ -60,6 +60,9 @@ model Message {
   attachmentName String?  @map("attachment_name")
   read           Boolean  @default(false)
   isDeleted      Boolean  @default(false) @map("is_deleted")
+  isViewOnce     Boolean  @default(false) @map("is_view_once")
+  isOpened       Boolean  @default(false) @map("is_opened")
+  color          String?
   createdAt      DateTime @default(now()) @map("created_at")
 
   sender   User @relation("SentMessages", fields: [senderId], references: [id])
@@ -245,6 +248,7 @@ model Notification {
   type         String   @default("info") // info, warning, success, alert
   sentBy       Int?     @map("sent_by")
   targetUserId Int?     @map("target_user_id")
+  color        String?
   createdAt    DateTime @default(now()) @map("created_at")
 
   admin      User?              @relation("SentNotifications", fields: [sentBy], references: [id])
@@ -278,4 +282,11 @@ model OtpCode {
   createdAt DateTime @default(now()) @map("created_at")
 
   @@map("otp_codes")
+}
+
+model SystemSetting {
+  key   String @id
+  value String
+
+  @@map("system_settings")
 }

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { X, Send, FileText, Image as ImageIcon, Film, Loader2 } from "lucide-react";
+import { X, Send, FileText, Image as ImageIcon, Film, Loader2, Eye, EyeOff } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,13 +8,14 @@ interface FilePreviewDialogProps {
     file: File | null;
     isOpen: boolean;
     onClose: () => void;
-    onSend: (caption: string) => void;
+    onSend: (caption: string, isViewOnce: boolean) => void;
     isUploading?: boolean;
 }
 
 const FilePreviewDialog = ({ file, isOpen, onClose, onSend, isUploading = false }: FilePreviewDialogProps) => {
     const [caption, setCaption] = useState("");
     const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+    const [isViewOnce, setIsViewOnce] = useState(false);
 
     useEffect(() => {
         if (file && file.type.startsWith("image/")) {
@@ -27,8 +28,9 @@ const FilePreviewDialog = ({ file, isOpen, onClose, onSend, isUploading = false 
     }, [file]);
 
     const handleSend = () => {
-        onSend(caption);
+        onSend(caption, isViewOnce);
         setCaption("");
+        setIsViewOnce(false);
         onClose();
     };
 
@@ -81,6 +83,18 @@ const FilePreviewDialog = ({ file, isOpen, onClose, onSend, isUploading = false 
                             disabled={isUploading}
                             autoFocus
                         />
+                        {(isImage || isVideo) && (
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                className={`absolute right-2 top-1/2 -translate-y-1/2 rounded-full transition-colors ${isViewOnce ? 'text-primary bg-primary/10 hover:bg-primary/20 hover:text-primary' : 'text-muted-foreground hover:bg-secondary'}`}
+                                onClick={() => setIsViewOnce(!isViewOnce)}
+                                title={isViewOnce ? "View Once Active" : "View Once"}
+                                disabled={isUploading}
+                            >
+                                {isViewOnce ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                            </Button>
+                        )}
                     </div>
                 </div>
 

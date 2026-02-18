@@ -7,8 +7,8 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import {
   Search, Send, Paperclip, Smile, ArrowLeft, Image, FileText,
-  Mic, MoreVertical, DollarSign, User as UserIcon, Plus,
-  Trash2, Ban, AlertTriangle, Download, X, CheckCircle2, Loader2, LogOut, Settings, User, HelpCircle, ShieldCheck
+  Mic, MoreVertical, IndianRupee, User as UserIcon, Plus,
+  Trash2, Ban, AlertTriangle, Download, X, CheckCircle2, Loader2, LogOut, Settings, User, HelpCircle, ShieldCheck, EyeOff, Eye
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
@@ -40,7 +40,7 @@ import {
 import {
   getChatList, getMessages, sendMessage, markMessagesAsRead, uploadFile,
   searchUsers, blockUser, reportUser, clearChatHistory, getUser,
-  deleteMessage, deleteMessagesBatch, getSupportChat,
+  deleteMessage, deleteMessagesBatch, getSupportChat, openViewOnceMessage,
   Chat as ChatType, Message as MessageType, AuthUser
 } from "@/lib/api";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -107,15 +107,6 @@ const ConversationList = ({
         <h1 className="text-xl font-bold text-foreground">Chats</h1>
         {user && (
           <div className="flex items-center gap-1">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={onSupport}
-              title="Help Center"
-              className="text-primary hover:text-primary hover:bg-primary/10"
-            >
-              <HelpCircle className="h-5 w-5" />
-            </Button>
             <NotificationBell />
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -234,11 +225,13 @@ const ConversationList = ({
               <div className="flex justify-between items-center">
                 <div className="flex items-center gap-1.5 min-w-0">
                   <span className="font-medium text-foreground truncate">{chat.display_name}</span>
-                  {chat.isOfficial && (
+                  {chat.isOfficial ? (
                     <Badge variant="secondary" className="bg-primary/10 text-primary text-[10px] h-4 px-1.5 border-none flex items-center gap-0.5">
                       <ShieldCheck className="h-3 w-3" />
                       OFFICIAL
                     </Badge>
+                  ) : chat.verified && (
+                    <img src="/verified-badge.svg" alt="Verified" className="h-5 w-5 flex-shrink-0" />
                   )}
                 </div>
                 <span className="text-xs text-muted-foreground">
@@ -304,7 +297,7 @@ const ChatView = ({
   onDeleteMessagesBatch: (ids: number[]) => void;
   pendingFile: File | null;
   setPendingFile: (file: File | null) => void;
-  handleConfirmUpload: (caption: string) => void;
+  handleConfirmUpload: (caption: string, viewOnce: boolean) => void;
   isLoading: boolean;
 }) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -353,6 +346,15 @@ const ChatView = ({
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  const handleOpenViewOnce = async (msg: MessageType) => {
+    if (msg.senderId === user?.id) return; // Don't handle opening for sender (local only)
+    try {
+      await openViewOnceMessage(msg.id);
+    } catch (err) {
+      console.error("Failed to open view-once message:", err);
+    }
+  };
   if (!selectedChat) {
     return (
       <div className="flex flex-col h-full items-center justify-center bg-background">
@@ -413,7 +415,7 @@ const ChatView = ({
                     OFFICIAL
                   </Badge>
                 ) : selectedChat.verified && (
-                  <img src="/verified-badge.svg" alt="Verified" className="h-5 w-5 flex-shrink-0" title="Verified Account" />
+                  <img src="/verified-badge.svg" alt="Verified" className="h-7 w-7 flex-shrink-0" title="Verified Account" />
                 )}
               </div>
               <p className="text-xs text-muted-foreground">
@@ -450,6 +452,9 @@ const ChatView = ({
           ) : (
             messages.map((msg) => {
               const isMine = msg.senderId === user?.id;
+              const isAdminMsg = selectedChat?.isOfficial && (!isMine || user?.role === 'admin');
+              const isEscrowOrNotify = msg.messageType?.startsWith?.('escrow_') || (msg as any).message_type?.startsWith?.('escrow_') || msg.messageType === 'notification' || (msg as any).message_type === 'notification' || isAdminMsg;
+
               return (
                 <div
                   key={msg.id}
@@ -471,44 +476,142 @@ const ChatView = ({
                       </div>
                     </div>
                   )}
-                  {isMine && !msg.isDeleted && !isSelectionMode && !isMobile && (
-                    <div className="opacity-0 group-hover:opacity-100 transition-opacity order-first">
+                  {!msg.isDeleted && !isSelectionMode && !isMobile && (
+                    <div className={`opacity-0 group-hover:opacity-100 transition-opacity ${isMine ? "order-first" : "order-last"}`}>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full hover:bg-secondary">
                             <MoreVertical className="h-4 w-4 text-muted-foreground" />
                           </Button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="start" className="w-32 bg-card border-border">
-                          <DropdownMenuItem
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onMessageDeleted(msg.id);
-                            }}
-                            className="text-destructive focus:text-destructive"
-                          >
-                            <Trash2 className="mr-2 h-4 w-4" /> Delete
-                          </DropdownMenuItem>
+                        <DropdownMenuContent align={isMine ? "end" : "start"} className="w-32 bg-card border-border">
+                          {isMine && (
+                            <DropdownMenuItem
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onMessageDeleted(msg.id);
+                              }}
+                              className="text-destructive focus:text-destructive"
+                            >
+                              <Trash2 className="mr-2 h-4 w-4" /> Delete
+                            </DropdownMenuItem>
+                          )}
                           <DropdownMenuItem
                             onClick={(e) => {
                               e.stopPropagation();
                               toggleMessageSelection(msg.id);
                             }}
                           >
-                            <Trash2 className="mr-2 h-4 w-4" /> Select
+                            <CheckCircle2 className="mr-2 h-4 w-4" /> Select
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </div>
                   )}
                   <div
-                    className={`max-w-[75%] rounded-2xl px-4 py-2.5 relative ${isMine
-                      ? "bg-primary text-primary-foreground rounded-br-md"
-                      : "bg-secondary text-secondary-foreground rounded-bl-md"
-                      } ${msg.isDeleted ? "opacity-60 italic" : ""}`}
+                    className={`max-w-[85%] rounded-2xl px-4 py-3 relative ${isMine
+                      ? (isEscrowOrNotify ? "" : "bg-primary text-primary-foreground rounded-br-md")
+                      : (isEscrowOrNotify ? "" : "bg-secondary text-secondary-foreground rounded-bl-md")
+                      } ${msg.isDeleted ? "opacity-60 italic" : ""} ${isEscrowOrNotify ? (
+                        (msg.messageType === 'escrow_released' || (msg as any).message_type === 'escrow_released')
+                          ? "bg-gradient-to-br from-emerald-600 to-teal-700 text-white shadow-lg border border-white/20 rounded-2xl"
+                          : (msg.messageType === 'notification' || (msg as any).message_type === 'notification' || isAdminMsg)
+                            ? (isAdminMsg ? (msg.color ? "" : "bg-gradient-to-br from-blue-600 via-indigo-700 to-violet-800 text-white shadow-xl border border-white/30 rounded-2xl") : "bg-gradient-to-br from-amber-500 to-orange-600 text-white shadow-lg border border-white/20 rounded-2xl")
+                            : "bg-gradient-to-br from-indigo-600 to-purple-700 text-white shadow-lg border border-white/20 rounded-2xl"
+                      ) : ""}`}
+                    style={isEscrowOrNotify && isAdminMsg && msg.color ? {
+                      background: `linear-gradient(135deg, ${msg.color} 0%, ${msg.color}cc 100%)`,
+                      boxShadow: `0 10px 15px -3px ${msg.color}40`,
+                      border: '1px solid rgba(255,255,255,0.3)'
+                    } : {}}
                   >
-                    <p className="text-sm">{msg.content}</p>
-                    {msg.attachmentUrl && !msg.isDeleted && (
+                    {msg.isViewOnce ? (
+                      <div
+                        className={`flex items-center gap-3 py-1 cursor-pointer transition-all active:scale-95 ${msg.isOpened ? 'opacity-60' : 'hover:opacity-80'}`}
+                        onClick={(e) => {
+                          if (!isMine && !msg.isOpened && !isSelectionMode) {
+                            e.stopPropagation();
+                            if (msg.attachmentUrl) {
+                              setPreviewImage(msg.attachmentUrl);
+                              handleOpenViewOnce(msg);
+                            } else {
+                              // If it's just text, we can show it in a toggle or handled by the parent bubble
+                            }
+                          }
+                        }}
+                      >
+                        <div className={`h-8 w-8 rounded-full flex items-center justify-center ${isMine ? 'bg-white/20' : 'bg-primary/10 text-primary'}`}>
+                          {msg.isOpened ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </div>
+                        <div className="flex flex-col">
+                          <span className="text-sm font-bold">
+                            {msg.isOpened ? "Viewed" : (isMine ? "Photo" : "View Photo")}
+                          </span>
+                          {!msg.isOpened && !isMine && <span className="text-[10px] opacity-70">Click to view once</span>}
+                        </div>
+                      </div>
+                    ) : isEscrowOrNotify ? (
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-3">
+                          <div className={`h-10 w-10 rounded-full flex items-center justify-center backdrop-blur-md shadow-inner ${isAdminMsg ? 'bg-white/30 border border-white/40' : 'bg-white/20'}`}>
+                            {msg.messageType === 'escrow_created' || (msg as any).message_type === 'escrow_created' ? <Plus className="h-5 w-5" /> : (
+                              (msg.messageType === 'escrow_released' || (msg as any).message_type === 'escrow_released') ? <IndianRupee className="h-5 w-5" /> : (
+                                (msg.messageType === 'notification' || (msg as any).message_type === 'notification' || isAdminMsg) ? <ShieldCheck className="h-5 w-5" /> : <ShieldCheck className="h-5 w-5" />
+                              )
+                            )}
+                          </div>
+                          <div>
+                            <p className="font-bold text-base leading-none flex items-center gap-1.5">
+                              {isAdminMsg ? (
+                                <>
+                                  <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+                                  Admin Support
+                                </>
+                              ) : msg.messageType === 'escrow_created' || (msg as any).message_type === 'escrow_created' ? "Escrow Deal Created" : (
+                                (msg.messageType === 'escrow_released' || (msg as any).message_type === 'escrow_released') ? "Payment Released" : (
+                                  (msg.messageType === 'notification' || (msg as any).message_type === 'notification') ? (msg.content.match(/\*\*(.*?)\*\*/) ? msg.content.match(/\*\*(.*?)\*\*/)?.[1] : "System Update") : "Payment Confirmed"
+                                )
+                              )}
+                            </p>
+                            <p className="text-[10px] text-white/70 mt-1 uppercase tracking-wider font-bold">
+                              {isAdminMsg ? "Official Help Center" : (msg.messageType === 'notification' || (msg as any).message_type === 'notification') ? "Official Notification" : "Official Escrow System"}
+                            </p>
+                          </div>
+                        </div>
+                        <div className={`bg-black/20 rounded-xl p-3 border border-white/10 backdrop-blur-sm ${isAdminMsg ? 'border-white/20' : ''}`}>
+                          <p className="text-sm font-medium leading-relaxed">
+                            {isAdminMsg ? (
+                              msg.content.split('\n').map((line, i) => (
+                                <React.Fragment key={i}>
+                                  {line.split(/(\*\*.*?\*\*)/).map((part, j) => {
+                                    if (part.startsWith('**') && part.endsWith('**')) {
+                                      return <strong key={j} className="text-emerald-300">{part.slice(2, -2)}</strong>;
+                                    }
+                                    return part;
+                                  })}
+                                  {i < msg.content.split('\n').length - 1 && <br />}
+                                </React.Fragment>
+                              ))
+                            ) : (msg.messageType === 'notification' || (msg as any).message_type === 'notification') ? msg.content.split('\n\n')[1] || msg.content.replace(/🔔 \*\*(.*?)\*\*\n\n/, '') : msg.content}
+                          </p>
+                        </div>
+                        {(msg.messageType?.startsWith?.('escrow_') || (msg as any).message_type?.startsWith?.('escrow_')) && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              navigate('/escrow');
+                            }}
+                            className={`w-full py-2 bg-white rounded-lg text-sm font-bold shadow-sm hover:bg-white/90 transition-all flex items-center justify-center gap-2 active:scale-[0.98] ${(msg.messageType === 'escrow_released' || (msg as any).message_type === 'escrow_released') ? "text-emerald-700" : "text-indigo-700"
+                              }`}
+                          >
+                            View Details <ArrowLeft className="h-4 w-4 rotate-180" />
+                          </button>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="text-sm">{msg.content}</p>
+                    )}
+                    {msg.attachmentUrl && !msg.isDeleted && !msg.isViewOnce && (
                       <div className="mt-2 p-2 bg-black/10 rounded-lg flex items-center gap-2">
                         {msg.messageType === 'image' || msg.attachmentUrl.match(/\.(jpg|jpeg|png|gif|webp)$/i) ? (
                           <div
@@ -965,6 +1068,20 @@ const ChatPage = () => {
     return cleanup;
   }, [user, selectedChat]);
 
+  // Handle View Once messages being opened
+  useEffect(() => {
+    if (!user) return;
+    const cleanup = socketService.onMessageOpened((msg: MessageType) => {
+      if (selectedChat && msg.chatId === selectedChat.chat_id) {
+        setMessages((prev) =>
+          prev.map((m) => (m.id === msg.id ? msg : m))
+        );
+      }
+      loadChats();
+    });
+    return cleanup;
+  }, [user, selectedChat, loadChats]);
+
   // Load messages and join room when selected chat changes
   useEffect(() => {
     if (selectedChat && user) {
@@ -1015,6 +1132,7 @@ const ChatPage = () => {
         chat_id: selectedChat.chat_id,
         content: messageToSend,
         message_type: "text",
+        is_view_once: false // Text messages are no longer view-once via main input
       });
       await loadMessages(selectedChat.chat_id);
       await loadChats();
@@ -1068,7 +1186,7 @@ const ChatPage = () => {
     if (fileInputRef.current) fileInputRef.current.value = "";
   }, [selectedChat, user]);
 
-  const handleConfirmUpload = useCallback(async (caption: string) => {
+  const handleConfirmUpload = useCallback(async (caption: string, viewOnce: boolean) => {
     if (!pendingFile || !selectedChat || !user) return;
 
     // Create optimistic message immediately
@@ -1084,7 +1202,8 @@ const ChatPage = () => {
       attachmentName: pendingFile.name,
       createdAt: new Date().toISOString(),
       read: false,
-      isDeleted: false
+      isDeleted: false,
+      isViewOnce: viewOnce
     } as MessageType & { isUploading?: boolean };
 
     // Add optimistic message to UI
@@ -1097,7 +1216,8 @@ const ChatPage = () => {
         receiver_id: selectedChat.user_id,
         chat_id: selectedChat.chat_id,
         file: pendingFile,
-        content: caption || `Sent a file: ${pendingFile.name}`
+        content: caption || `Sent a file: ${pendingFile.name}`,
+        is_view_once: viewOnce
       });
 
       // Replace optimistic message with real one

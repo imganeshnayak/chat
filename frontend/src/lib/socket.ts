@@ -52,6 +52,12 @@ class SocketService {
         return () => { this.socket?.off("messageDeleted", callback); };
     }
 
+    onMessageOpened(callback: (message: any) => void) {
+        if (!this.socket) return;
+        this.socket.on("messageOpened", callback);
+        return () => { this.socket?.off("messageOpened", callback); };
+    }
+
     disconnect() {
         if (this.socket) {
             this.socket.disconnect();

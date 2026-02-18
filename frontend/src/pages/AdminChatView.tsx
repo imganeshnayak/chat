@@ -98,9 +98,15 @@ const AdminChatView = () => {
                                     </div>
                                 )}
                                 <div className={`p-4 rounded-2xl text-sm shadow-sm ${isSystem
-                                        ? 'bg-secondary/40 text-muted-foreground text-xs italic border border-border px-6'
-                                        : 'bg-card text-card-foreground border border-border max-w-[85%]'
+                                    ? 'bg-secondary/40 text-muted-foreground text-xs italic border border-border px-6'
+                                    : 'bg-card text-card-foreground border border-border max-w-[85%]'
                                     }`}>
+                                    {msg.isViewOnce && (
+                                        <div className="flex items-center gap-1.5 text-[10px] font-bold text-primary mb-1 uppercase tracking-wider">
+                                            <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
+                                            View Once Message {msg.isOpened && "(Opened)"}
+                                        </div>
+                                    )}
                                     {msg.content}
                                     {msg.attachmentUrl && (
                                         <div className="mt-3 p-3 bg-secondary/50 rounded-xl border border-border flex items-center gap-2">

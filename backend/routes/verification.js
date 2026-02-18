@@ -6,11 +6,14 @@ import { sendUserNotification } from './notifications.js';
 const prisma = new PrismaClient();
 const router = express.Router();
 
-const VERIFICATION_FEE = 109; // ₹109
 
 // POST /api/verification/apply - Submit verification request
 router.post('/apply', auth, async (req, res) => {
     try {
+        let currentFee = 109;
+        const setting = await prisma.systemSetting.findUnique({ where: { key: 'verification_fee' } });
+        if (setting) currentFee = parseFloat(setting.value);
+
         const { paymentProof } = req.body;
 
         // Check if user is already verified
@@ -35,11 +38,10 @@ router.post('/apply', auth, async (req, res) => {
             return res.status(400).json({ error: 'You already have a pending verification request.' });
         }
 
-        // Create new verification request
         const verificationRequest = await prisma.verificationRequest.create({
             data: {
                 userId: req.user.id,
-                paymentAmount: VERIFICATION_FEE,
+                paymentAmount: currentFee,
                 paymentProof: paymentProof || null,
                 status: 'pending'
             }
@@ -69,7 +71,14 @@ router.get('/status', auth, async (req, res) => {
 
 // GET /api/verification/fee - Get verification fee amount
 router.get('/fee', auth, async (req, res) => {
-    res.json({ fee: VERIFICATION_FEE, currency: 'INR' });
+    try {
+        let currentFee = 109;
+        const setting = await prisma.systemSetting.findUnique({ where: { key: 'verification_fee' } });
+        if (setting) currentFee = parseFloat(setting.value);
+        res.json({ fee: currentFee, currency: 'INR' });
+    } catch (err) {
+        res.json({ fee: 109, currency: 'INR' });
+    }
 });
 
 // GET /api/verification/requests - List all verification requests (admin only)

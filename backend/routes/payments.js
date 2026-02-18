@@ -79,10 +79,11 @@ router.post('/escrow/initiate', auth, async (req, res) => {
     }
 });
 
-// POST /api/payments/verification/initiate - Create Razorpay order for verification fee
 router.post('/verification/initiate', auth, async (req, res) => {
     try {
-        const VERIFICATION_FEE = 109;
+        let VERIFICATION_FEE = 109; // Default
+        const setting = await prisma.systemSetting.findUnique({ where: { key: 'verification_fee' } });
+        if (setting) VERIFICATION_FEE = parseFloat(setting.value);
 
         // Check if user already verified
         const user = await prisma.user.findUnique({
@@ -111,6 +112,12 @@ router.post('/verification/initiate', auth, async (req, res) => {
                     status: 'pending_payment',
                     paymentStatus: 'pending'
                 }
+            });
+        } else {
+            // Update existing request with current fee
+            verificationRequest = await prisma.verificationRequest.update({
+                where: { id: verificationRequest.id },
+                data: { paymentAmount: VERIFICATION_FEE }
             });
         }
 
@@ -242,6 +249,34 @@ router.post('/verify', auth, async (req, res) => {
                     sendUserNotification(io, req.user.id, '✅ Payment Successful', `Your payment of ₹${deal.totalAmount.toLocaleString('en-IN')} for "${deal.title}" was successful. The deal is now active.`, 'success');
                     sendUserNotification(io, deal.vendorId, '💰 Payment Received', `A client paid ₹${deal.totalAmount.toLocaleString('en-IN')} for the deal "${deal.title}". You can now start the work.`, 'success');
 
+                    // Create a system message in the chat
+                    const systemMessage = await tx.message.create({
+                        data: {
+                            senderId: req.user.id,
+                            receiverId: deal.vendorId,
+                            chatId: deal.chatId,
+                            content: `✅ Escrow Payment Confirmed: ₹${deal.totalAmount.toLocaleString('en-IN')} for "${deal.title}". The deal is now active.`,
+                            messageType: 'escrow_payment'
+                        },
+                        include: {
+                            sender: {
+                                select: { displayName: true, avatarUrl: true, username: true }
+                            }
+                        }
+                    });
+
+                    if (io) {
+                        const socketResult = {
+                            ...systemMessage,
+                            sender_name: systemMessage.sender.displayName,
+                            sender_avatar: systemMessage.sender.avatarUrl,
+                            sender_username: systemMessage.sender.username,
+                        };
+                        io.to(deal.chatId).emit('newMessage', socketResult);
+                        // Also notify receiver's personal room
+                        io.to(`user_${deal.vendorId}`).emit('newMessage', socketResult);
+                    }
+
                 } else if (type === 'verification') {
                     const verificationRequest = await tx.verificationRequest.findUnique({ where: { id: numericEntityId } });
                     await tx.verificationRequest.update({
@@ -349,8 +384,40 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
                 if (result) {
                     const io = req.app.get('io');
                     if (result.type === 'escrow') {
-                        sendUserNotification(io, result.deal.clientId, '✅ Payment Successful', `Your payment of ₹${result.deal.totalAmount.toLocaleString('en-IN')} for "${result.deal.title}" was successful.`, 'success');
-                        sendUserNotification(io, result.deal.vendorId, '💰 Payment Received', `Payment for "${result.deal.title}" was received. You can now start the work.`, 'success');
+                        const deal = result.deal;
+                        sendUserNotification(io, deal.clientId, '✅ Payment Successful', `Your payment of ₹${deal.totalAmount.toLocaleString('en-IN')} for "${deal.title}" was successful.`, 'success');
+                        sendUserNotification(io, deal.vendorId, '💰 Payment Received', `Payment for "${deal.title}" was received. You can now start the work.`, 'success');
+
+                        // Create a system message in the chat
+                        try {
+                            const systemMessage = await prisma.message.create({
+                                data: {
+                                    senderId: deal.clientId,
+                                    receiverId: deal.vendorId,
+                                    chatId: deal.chatId,
+                                    content: `✅ Escrow Payment Confirmed: ₹${deal.totalAmount.toLocaleString('en-IN')} for "${deal.title}". The deal is now active.`,
+                                    messageType: 'escrow_payment'
+                                },
+                                include: {
+                                    sender: {
+                                        select: { displayName: true, avatarUrl: true, username: true }
+                                    }
+                                }
+                            });
+
+                            const socketResult = {
+                                ...systemMessage,
+                                sender_name: systemMessage.sender.displayName,
+                                sender_avatar: systemMessage.sender.avatarUrl,
+                                sender_username: systemMessage.sender.username,
+                            };
+                            io.to(deal.chatId).emit('newMessage', socketResult);
+                            // Also notify receiver's personal room
+                            io.to(`user_${deal.vendorId}`).emit('newMessage', socketResult);
+                            io.to(`user_${deal.clientId}`).emit('newMessage', socketResult);
+                        } catch (msgErr) {
+                            console.error('Failed to send escrow payment chat message (webhook):', msgErr);
+                        }
                     } else if (result.type === 'verification') {
                         sendUserNotification(io, result.request.userId, '🛡️ Verification Payment Received', `Your verification payment was received.`, 'success');
                     }
