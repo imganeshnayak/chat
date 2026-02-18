@@ -243,13 +243,13 @@ router.post('/broadcast', auth, adminOnly, async (req, res) => {
                 if (io) {
                     io.to(chatId).emit('newMessage', {
                         ...msg,
-                        sender_name: "Help Center",
-                        sender_avatar: notification.admin?.avatarUrl
+                        sender_name: "Admin",
+                        sender_avatar: null // Use default system avatar
                     });
                 }
             }
         } catch (msgErr) {
-            console.error('Failed to mirror broadcast to Help Center:', msgErr);
+            console.error('Failed to mirror broadcast to Admin chat:', msgErr);
         }
 
         console.log(`📢 Admin broadcast sent: "${title}" to all users`);
@@ -318,13 +318,13 @@ export async function sendUserNotification(io, targetUserId, title, message, typ
                 if (io) {
                     io.to(chatId).emit('newMessage', {
                         ...msg,
-                        sender_name: "Help Center",
-                        sender_avatar: admin.avatarUrl
+                        sender_name: "Admin",
+                        sender_avatar: null // Use default system avatar
                     });
                 }
             }
         } catch (msgErr) {
-            console.error('Failed to mirror notification to Help Center chat:', msgErr);
+            console.error('Failed to mirror notification to Admin chat:', msgErr);
         }
 
         return notification;

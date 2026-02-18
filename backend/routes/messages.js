@@ -52,7 +52,7 @@ router.get('/chats/list', auth, async (req, res) => {
             }
         }
 
-        // Ensure "Help Center" (Support Admin) is always in the list
+        // Ensure "Admin" (Support Admin) is always in the list
         const supportChatId = `support_${req.user.id}`;
         if (!chatMap.has(supportChatId)) {
             const admin = await prisma.user.findFirst({
@@ -66,9 +66,9 @@ router.get('/chats/list', auth, async (req, res) => {
                     last_message: "Official Support & Notifications",
                     last_message_time: new Date().toISOString(),
                     user_id: admin.id,
-                    display_name: "Help Center",
-                    avatar_url: admin.avatarUrl,
-                    username: admin.username,
+                    display_name: "Admin",
+                    avatar_url: null, // Use default system avatar, not specific admin's pic
+                    username: "admin", // Generic username
                     unread_count: 0,
                     verified: true,
                     isOfficial: true // Special flag for frontend
@@ -77,7 +77,9 @@ router.get('/chats/list', auth, async (req, res) => {
         } else {
             // Update existing support chat entry with branding
             const supportEntry = chatMap.get(supportChatId);
-            supportEntry.display_name = "Help Center";
+            supportEntry.display_name = "Admin";
+            supportEntry.avatar_url = null; // Ensure generic avatar
+            supportEntry.username = "admin";
             supportEntry.isOfficial = true;
         }
 
@@ -104,7 +106,7 @@ router.get('/support', auth, async (req, res) => {
         const chatId = `support_${req.user.id}`;
 
         res.json({
-            admin: { ...admin, displayName: "Help Center" },
+            admin: { ...admin, displayName: "Admin", avatarUrl: null, username: "admin" }, // Generic details
             chatId
         });
     } catch (err) {
