@@ -171,9 +171,14 @@ router.get('/chats', auth, adminOnly, async (req, res) => {
         const { page = 1, limit = 20 } = req.query;
         const skip = (parseInt(page) - 1) * parseInt(limit);
 
-        // Get unique chat IDs with message counts
+        // Get unique chat IDs with message counts, strictly filtering for support chats
         const chatGroups = await prisma.message.groupBy({
             by: ['chatId'],
+            where: {
+                chatId: {
+                    startsWith: 'support_'
+                }
+            },
             _count: { id: true },
             _max: { createdAt: true },
             orderBy: { _max: { createdAt: 'desc' } },
@@ -209,6 +214,11 @@ router.get('/chats', auth, adminOnly, async (req, res) => {
 
         const total = await prisma.message.groupBy({
             by: ['chatId'],
+            where: {
+                chatId: {
+                    startsWith: 'support_'
+                }
+            },
             _count: true
         });
 
@@ -366,6 +376,15 @@ router.put('/users/:id/role', auth, adminOnly, async (req, res) => {
                 role: true
             }
         });
+
+        // If user was demoted from admin (i.e., new role is NOT admin), force disconnect to clear permissions
+        if (role !== 'admin') {
+            const io = req.app.get('io');
+            if (io) {
+                // Determine user's socket room (assuming standard 'user_{id}' pattern)
+                io.to(`user_${userId}`).emit('forceDisconnect', { reason: 'Role updated' });
+            }
+        }
 
         await prisma.activityLog.create({
             data: {

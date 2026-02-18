@@ -8,12 +8,31 @@ export default function setupSocket(io) {
     io.on('connection', (socket) => {
         console.log(`🔌 Socket connected: ${socket.id}`);
 
-        socket.on('join', ({ userId, chatId }) => {
-            onlineUsers.set(userId, socket.id);
-            socket.join(chatId);
-            socket.join(`user_${userId}`); // Join personal room for notifications
-            io.emit('userOnline', { userId, online: true });
-            console.log(`👤 User ${userId} joined chat ${chatId} and personal room`);
+        socket.on('join', async ({ userId, chatId }) => {
+            try {
+                // Verify user role from DB for security
+                const user = await prisma.user.findUnique({
+                    where: { id: parseInt(userId) },
+                    select: { role: true }
+                });
+
+                if (user) {
+                    onlineUsers.set(userId, socket.id);
+                    socket.join(chatId);
+                    socket.join(`user_${userId}`); // Join personal room for notifications
+
+                    // If admin, join the admin broadcast room
+                    if (user.role === 'admin') {
+                        socket.join('admin_broadcast');
+                        console.log(`🛡️ Admin ${userId} joined admin_broadcast room`);
+                    }
+
+                    io.emit('userOnline', { userId, online: true });
+                    console.log(`👤 User ${userId} joined chat ${chatId} and personal room`);
+                }
+            } catch (err) {
+                console.error('Socket join error:', err);
+            }
         });
 
         socket.on('message', async (data) => {

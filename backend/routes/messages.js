@@ -179,6 +179,11 @@ router.post('/', auth, async (req, res) => {
             io.to(chat_id).emit('newMessage', result);
             // Also notify receiver's personal room to refresh their chat list
             io.to(`user_${receiver_id}`).emit('newMessage', result);
+
+            // If it's a support chat, broadcast to ALL admins
+            if (chat_id.startsWith('support_')) {
+                io.to('admin_broadcast').emit('newMessage', result);
+            }
         }
 
         res.status(201).json(result);
