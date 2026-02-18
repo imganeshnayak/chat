@@ -2,6 +2,7 @@ import express from 'express';
 import { PrismaClient } from '@prisma/client';
 import { auth } from '../middleware/auth.js';
 import { createOrder, verifyPaymentSignature, fetchPayment } from '../config/razorpay.js';
+import { sendUserNotification } from './notifications.js';
 
 const prisma = new PrismaClient();
 const router = express.Router();
@@ -179,105 +180,105 @@ router.post('/verify', auth, async (req, res) => {
             return res.status(400).json({ error: 'Payment not successful.' });
         }
 
-        // Update based on type
-        if (type === 'escrow') {
-            const deal = await prisma.escrowDeal.findUnique({
-                where: { id: parseInt(entityId) }
+        // Check if this payment has already been processed (prevent duplicates)
+        // We use a transaction and attempt to create the log first to ensure atomicity
+        try {
+            await prisma.$transaction(async (tx) => {
+                const numericEntityId = parseInt(entityId);
+
+                // 1. Fetch the relevant entity to get the amount
+                let amount = 0;
+                if (type === 'escrow') {
+                    const deal = await tx.escrowDeal.findUnique({ where: { id: numericEntityId } });
+                    if (!deal) throw new Error('Escrow deal not found');
+                    if (deal.clientId !== req.user.id) throw new Error('Unauthorized');
+                    amount = deal.totalAmount;
+                } else if (type === 'verification') {
+                    const verificationRequest = await tx.verificationRequest.findUnique({ where: { id: numericEntityId } });
+                    if (!verificationRequest) throw new Error('Verification request not found');
+                    if (verificationRequest.userId !== req.user.id) throw new Error('Unauthorized');
+                    amount = verificationRequest.paymentAmount;
+                } else {
+                    throw new Error('Invalid payment type');
+                }
+
+                // 2. Create the PaymentLog (this will fail if razorpayPaymentId is already registered)
+                await tx.paymentLog.create({
+                    data: {
+                        type,
+                        entityId: numericEntityId,
+                        razorpayOrderId: orderId,
+                        razorpayPaymentId: paymentId,
+                        amount,
+                        currency: 'INR',
+                        status: 'paid',
+                        metadata: payment
+                    }
+                });
+
+                // 3. Update the entity and log activity
+                if (type === 'escrow') {
+                    const deal = await tx.escrowDeal.findUnique({ where: { id: numericEntityId } });
+                    await tx.escrowDeal.update({
+                        where: { id: numericEntityId },
+                        data: {
+                            razorpayPaymentId: paymentId,
+                            paymentStatus: 'paid',
+                            paidAmount: deal.totalAmount,
+                            status: 'active'
+                        }
+                    });
+
+                    await tx.activityLog.create({
+                        data: {
+                            userId: req.user.id,
+                            action: 'Paid for escrow deal',
+                            details: `₹${deal.totalAmount} - ${deal.title}`
+                        }
+                    });
+
+                    // Send notifications
+                    const io = req.app.get('io');
+                    sendUserNotification(io, req.user.id, '✅ Payment Successful', `Your payment of ₹${deal.totalAmount.toLocaleString('en-IN')} for "${deal.title}" was successful. The deal is now active.`, 'success');
+                    sendUserNotification(io, deal.vendorId, '💰 Payment Received', `A client paid ₹${deal.totalAmount.toLocaleString('en-IN')} for the deal "${deal.title}". You can now start the work.`, 'success');
+
+                } else if (type === 'verification') {
+                    const verificationRequest = await tx.verificationRequest.findUnique({ where: { id: numericEntityId } });
+                    await tx.verificationRequest.update({
+                        where: { id: numericEntityId },
+                        data: {
+                            razorpayPaymentId: paymentId,
+                            paymentStatus: 'paid',
+                            status: 'pending'
+                        }
+                    });
+
+                    await tx.activityLog.create({
+                        data: {
+                            userId: req.user.id,
+                            action: 'Paid for verification',
+                            details: `₹${verificationRequest.paymentAmount}`
+                        }
+                    });
+
+                    const io = req.app.get('io');
+                    sendUserNotification(io, req.user.id, '🛡️ Verification Payment Received', `We received your payment for verification. Our team will review your account shortly.`, 'success');
+                }
             });
 
-            if (!deal) {
-                return res.status(404).json({ error: 'Escrow deal not found.' });
+            return res.json({ message: 'Payment verified successfully.' });
+
+        } catch (err) {
+            if (err.code === 'P2002') {
+                console.log(`ℹ️ Payment ${paymentId} already processed (manual verify)`);
+                return res.json({ message: 'Payment already processed.', status: 'already_processed' });
             }
+            if (err.message === 'Unauthorized') return res.status(403).json({ error: 'Unauthorized.' });
+            if (err.message.includes('not found')) return res.status(404).json({ error: err.message });
+            if (err.message === 'Invalid payment type') return res.status(400).json({ error: err.message });
 
-            if (deal.clientId !== req.user.id) {
-                return res.status(403).json({ error: 'Unauthorized.' });
-            }
-
-            // Update deal to active and paid
-            await prisma.escrowDeal.update({
-                where: { id: deal.id },
-                data: {
-                    razorpayPaymentId: paymentId,
-                    paymentStatus: 'paid',
-                    paidAmount: deal.totalAmount,
-                    status: 'active' // Now active since payment is confirmed
-                }
-            });
-
-            // Log successful payment
-            await prisma.paymentLog.create({
-                data: {
-                    type: 'escrow',
-                    entityId: deal.id,
-                    razorpayOrderId: orderId,
-                    razorpayPaymentId: paymentId,
-                    amount: deal.totalAmount,
-                    currency: 'INR',
-                    status: 'paid',
-                    metadata: payment
-                }
-            });
-
-            await prisma.activityLog.create({
-                data: {
-                    userId: req.user.id,
-                    action: 'Paid for escrow deal',
-                    details: `₹${deal.totalAmount} - ${deal.title}`
-                }
-            });
-
-            res.json({ message: 'Payment verified successfully.', status: 'active' });
-
-        } else if (type === 'verification') {
-            const verificationRequest = await prisma.verificationRequest.findUnique({
-                where: { id: parseInt(entityId) }
-            });
-
-            if (!verificationRequest) {
-                return res.status(404).json({ error: 'Verification request not found.' });
-            }
-
-            if (verificationRequest.userId !== req.user.id) {
-                return res.status(403).json({ error: 'Unauthorized.' });
-            }
-
-            // Update request to pending (waiting for admin review)
-            await prisma.verificationRequest.update({
-                where: { id: verificationRequest.id },
-                data: {
-                    razorpayPaymentId: paymentId,
-                    paymentStatus: 'paid',
-                    status: 'pending' // Now pending admin review
-                }
-            });
-
-            // Log successful payment
-            await prisma.paymentLog.create({
-                data: {
-                    type: 'verification',
-                    entityId: verificationRequest.id,
-                    razorpayOrderId: orderId,
-                    razorpayPaymentId: paymentId,
-                    amount: verificationRequest.paymentAmount,
-                    currency: 'INR',
-                    status: 'paid',
-                    metadata: payment
-                }
-            });
-
-            await prisma.activityLog.create({
-                data: {
-                    userId: req.user.id,
-                    action: 'Paid for verification',
-                    details: `₹${verificationRequest.paymentAmount}`
-                }
-            });
-
-            res.json({ message: 'Payment verified successfully.', status: 'pending' });
-        } else {
-            return res.status(400).json({ error: 'Invalid payment type.' });
+            throw err; // Let outer catch handle it
         }
-
     } catch (err) {
         console.error('Verify payment error:', err);
         res.status(500).json({ error: 'Failed to verify payment.' });
@@ -298,62 +299,69 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
             const orderId = paymentEntity.order_id;
             const paymentId = paymentEntity.id;
 
-            // Find associated escrow deal or verification request
-            const deal = await prisma.escrowDeal.findFirst({
-                where: { razorpayOrderId: orderId }
-            });
+            try {
+                const result = await prisma.$transaction(async (tx) => {
+                    // Try to create the payment log (idempotency anchor)
+                    const deal = await tx.escrowDeal.findFirst({ where: { razorpayOrderId: orderId } });
+                    const verificationRequest = await tx.verificationRequest.findFirst({ where: { razorpayOrderId: orderId } });
 
-            const verificationRequest = await prisma.verificationRequest.findFirst({
-                where: { razorpayOrderId: orderId }
-            });
+                    if (!deal && !verificationRequest) return null; // Ignore unknown orders
 
-            if (deal) {
-                await prisma.escrowDeal.update({
-                    where: { id: deal.id },
-                    data: {
-                        razorpayPaymentId: paymentId,
-                        paymentStatus: 'paid',
-                        paidAmount: deal.totalAmount,
-                        status: 'active'
+                    await tx.paymentLog.create({
+                        data: {
+                            type: deal ? 'escrow' : 'verification',
+                            entityId: deal ? deal.id : verificationRequest.id,
+                            razorpayOrderId: orderId,
+                            razorpayPaymentId: paymentId,
+                            amount: deal ? deal.totalAmount : verificationRequest.paymentAmount,
+                            currency: 'INR',
+                            status: 'paid',
+                            eventType: 'payment.captured',
+                            metadata: paymentEntity
+                        }
+                    });
+
+                    if (deal) {
+                        await tx.escrowDeal.update({
+                            where: { id: deal.id },
+                            data: {
+                                razorpayPaymentId: paymentId,
+                                paymentStatus: 'paid',
+                                paidAmount: deal.totalAmount,
+                                status: 'active'
+                            }
+                        });
+                        return { type: 'escrow', deal };
+                    } else if (verificationRequest) {
+                        await tx.verificationRequest.update({
+                            where: { id: verificationRequest.id },
+                            data: {
+                                razorpayPaymentId: paymentId,
+                                paymentStatus: 'paid',
+                                status: 'pending'
+                            }
+                        });
+                        return { type: 'verification', request: verificationRequest };
                     }
                 });
 
-                await prisma.paymentLog.create({
-                    data: {
-                        type: 'escrow',
-                        entityId: deal.id,
-                        razorpayOrderId: orderId,
-                        razorpayPaymentId: paymentId,
-                        amount: deal.totalAmount,
-                        currency: 'INR',
-                        status: 'paid',
-                        eventType: 'payment.captured',
-                        metadata: paymentEntity
+                // Send notifications AFTER transaction commits
+                if (result) {
+                    const io = req.app.get('io');
+                    if (result.type === 'escrow') {
+                        sendUserNotification(io, result.deal.clientId, '✅ Payment Successful', `Your payment of ₹${result.deal.totalAmount.toLocaleString('en-IN')} for "${result.deal.title}" was successful.`, 'success');
+                        sendUserNotification(io, result.deal.vendorId, '💰 Payment Received', `Payment for "${result.deal.title}" was received. You can now start the work.`, 'success');
+                    } else if (result.type === 'verification') {
+                        sendUserNotification(io, result.request.userId, '🛡️ Verification Payment Received', `Your verification payment was received.`, 'success');
                     }
-                });
-            } else if (verificationRequest) {
-                await prisma.verificationRequest.update({
-                    where: { id: verificationRequest.id },
-                    data: {
-                        razorpayPaymentId: paymentId,
-                        paymentStatus: 'paid',
-                        status: 'pending'
-                    }
-                });
+                }
 
-                await prisma.paymentLog.create({
-                    data: {
-                        type: 'verification',
-                        entityId: verificationRequest.id,
-                        razorpayOrderId: orderId,
-                        razorpayPaymentId: paymentId,
-                        amount: verificationRequest.paymentAmount,
-                        currency: 'INR',
-                        status: 'paid',
-                        eventType: 'payment.captured',
-                        metadata: paymentEntity
-                    }
-                });
+            } catch (err) {
+                if (err.code === 'P2002') {
+                    console.log(` Payment ${paymentId} already processed (webhook)`);
+                    return res.json({ status: 'already_processed' });
+                }
+                throw err;
             }
         } else if (event.event === 'payment.failed') {
             const paymentEntity = event.payload.payment.entity;
@@ -372,6 +380,22 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
                     metadata: paymentEntity
                 }
             });
+
+            const io = req.app.get('io');
+            // Try to notify user if we can find the order
+            const deal = await prisma.escrowDeal.findFirst({
+                where: { razorpayOrderId: orderId }
+            });
+            if (deal) {
+                sendUserNotification(io, deal.clientId, '❌ Payment Failed', `Your payment of ₹${deal.totalAmount.toLocaleString('en-IN')} for "${deal.title}" failed.`, 'alert');
+            } else {
+                const verificationRequest = await prisma.verificationRequest.findFirst({
+                    where: { razorpayOrderId: orderId }
+                });
+                if (verificationRequest) {
+                    sendUserNotification(io, verificationRequest.userId, '❌ Payment Failed', `Your verification payment failed.`, 'alert');
+                }
+            }
         }
 
         res.json({ status: 'ok' });

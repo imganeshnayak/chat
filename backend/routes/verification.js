@@ -1,6 +1,7 @@
 import express from 'express';
 import { PrismaClient } from '@prisma/client';
 import { auth, adminOnly } from '../middleware/auth.js';
+import { sendUserNotification } from './notifications.js';
 
 const prisma = new PrismaClient();
 const router = express.Router();
@@ -133,6 +134,15 @@ router.put('/requests/:id/approve', auth, adminOnly, async (req, res) => {
             })
         ]);
 
+        const io = req.app.get('io');
+        sendUserNotification(
+            io,
+            verificationRequest.userId,
+            '🛡️ Account Verified',
+            'Congratulations! Your verification request has been approved. You now have a verified badge.',
+            'success'
+        );
+
         res.json({ message: 'Verification request approved successfully.' });
     } catch (err) {
         console.error('Approve verification request error:', err);
@@ -166,6 +176,15 @@ router.put('/requests/:id/reject', auth, adminOnly, async (req, res) => {
                 reviewedAt: new Date()
             }
         });
+
+        const io = req.app.get('io');
+        sendUserNotification(
+            io,
+            verificationRequest.userId,
+            '❌ Verification Rejected',
+            `Your verification request was rejected. ${adminNote ? 'Reason: ' + adminNote : ''}`,
+            'alert'
+        );
 
         res.json({ message: 'Verification request rejected.' });
     } catch (err) {

@@ -188,6 +188,7 @@ export interface Chat {
   username: string;
   unread_count: number;
   verified: boolean;
+  isOfficial?: boolean;
 }
 
 // ============ Moderation API ============
@@ -246,6 +247,10 @@ export function deleteMessage(messageId: number): Promise<{ success: boolean }> 
   return apiFetch<{ success: boolean }>(`/api/messages/${messageId}`, {
     method: "DELETE",
   });
+}
+
+export function getSupportChat(): Promise<{ admin: AuthUser; chatId: string }> {
+  return apiFetch<{ admin: AuthUser; chatId: string }>("/api/messages/support");
 }
 
 export function deleteMessagesBatch(messageIds: number[]): Promise<any> {
@@ -571,6 +576,7 @@ export interface EscrowDeal {
   vendorId: number;
   title: string;
   description?: string;
+  terms?: string;
   totalAmount: number;
   releasedPercent: number;
   status: string;
@@ -608,6 +614,7 @@ export function createEscrowDeal(data: {
   vendorId: number;
   title: string;
   description?: string;
+  terms?: string;
   totalAmount: number;
 }): Promise<EscrowDeal> {
   return apiFetch<EscrowDeal>("/api/escrow", {
@@ -763,6 +770,12 @@ export function markNotificationRead(id: number): Promise<{ success: boolean }> 
 export function markAllNotificationsRead(): Promise<{ success: boolean }> {
   return apiFetch<{ success: boolean }>("/api/notifications/read-all", {
     method: "POST",
+  });
+}
+
+export function deleteNotification(id: number): Promise<{ success: boolean }> {
+  return apiFetch<{ success: boolean }>(`/api/notifications/${id}`, {
+    method: "DELETE",
   });
 }
 

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
-import { Bell, X, CheckCheck, Info, AlertTriangle, CheckCircle, AlertCircle } from "lucide-react";
-import { getNotifications, markNotificationRead, markAllNotificationsRead, Notification } from "@/lib/api";
+import { Bell, X, CheckCheck, Info, AlertTriangle, CheckCircle, AlertCircle, Trash2 } from "lucide-react";
+import { getNotifications, markNotificationRead, markAllNotificationsRead, deleteNotification, Notification } from "@/lib/api";
 import { toast } from "sonner";
 import { io as socketIO } from "socket.io-client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -46,6 +46,10 @@ export default function NotificationBell() {
 
         const socket = socketIO(API_URL, { auth: { token } });
 
+        socket.on("connect", () => {
+            socket.emit("join", { userId: user.id, chatId: "global" });
+        });
+
         socket.on("admin:notification", (notification: Notification) => {
             setNotifications(prev => [notification, ...prev]);
 
@@ -88,6 +92,25 @@ export default function NotificationBell() {
             await markAllNotificationsRead();
             setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
         } catch { }
+    };
+
+    const handleDelete = async (id: number) => {
+        try {
+            // Optimistic update
+            const originalList = [...notifications];
+            setNotifications(prev => prev.filter(n => n.id !== id));
+
+            try {
+                await deleteNotification(id);
+            } catch (err: any) {
+                // Revert on error
+                setNotifications(originalList);
+                console.error("Failed to delete notification:", err);
+                toast.error("Could not delete notification", {
+                    description: "System notifications cannot be deleted."
+                });
+            }
+        } catch (err) { }
     };
 
     return (
@@ -151,18 +174,21 @@ export default function NotificationBell() {
                                 const cfg = typeConfig[n.type] || typeConfig.info;
                                 const Icon = cfg.icon;
                                 return (
-                                    <button
+                                    <div
                                         key={n.id}
-                                        onClick={() => handleMarkRead(n.id)}
-                                        className={`w-full text-left px-4 py-3 border-b border-white/5 hover:bg-white/5 transition-colors flex gap-3 ${!n.isRead ? "bg-white/[0.03]" : ""}`}
+                                        className={`w-full text-left px-4 py-3 border-b border-white/5 hover:bg-white/5 transition-colors flex gap-3 group ${!n.isRead ? "bg-white/[0.03]" : ""}`}
                                     >
-                                        {/* Icon */}
-                                        <div className={`flex-shrink-0 w-8 h-8 rounded-full ${cfg.bg} ${cfg.border} border flex items-center justify-center mt-0.5`}>
-                                            <Icon className={`w-4 h-4 ${cfg.color}`} />
-                                        </div>
+                                        <button
+                                            onClick={() => handleMarkRead(n.id)}
+                                            className="flex-shrink-0 flex items-center justify-center"
+                                        >
+                                            <div className={`w-8 h-8 rounded-full ${cfg.bg} ${cfg.border} border flex items-center justify-center`}>
+                                                <Icon className={`w-4 h-4 ${cfg.color}`} />
+                                            </div>
+                                        </button>
 
                                         {/* Content */}
-                                        <div className="flex-1 min-w-0">
+                                        <div className="flex-1 min-w-0 cursor-pointer" onClick={() => handleMarkRead(n.id)}>
                                             <div className="flex items-start justify-between gap-2">
                                                 <p className={`text-sm font-medium leading-tight ${n.isRead ? "text-white/70" : "text-white"}`}>
                                                     {n.title}
@@ -178,7 +204,19 @@ export default function NotificationBell() {
                                                 {timeAgo(n.createdAt)}
                                             </p>
                                         </div>
-                                    </button>
+
+                                        {/* Delete Action */}
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleDelete(n.id);
+                                            }}
+                                            className="opacity-0 group-hover:opacity-100 p-1.5 hover:bg-red-500/20 rounded-lg text-white/30 hover:text-red-400 transition-all self-start"
+                                            title="Delete notification"
+                                        >
+                                            <Trash2 className="w-3.5 h-3.5" />
+                                        </button>
+                                    </div>
                                 );
                             })
                         )}

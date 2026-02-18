@@ -41,6 +41,7 @@ const EscrowPage = () => {
     vendorId: "",
     title: "",
     description: "",
+    terms: "",
     totalAmount: ""
   });
 
@@ -190,11 +191,12 @@ const EscrowPage = () => {
         vendorId: parseInt(newDeal.vendorId),
         title: newDeal.title,
         description: newDeal.description,
+        terms: newDeal.terms,
         totalAmount: parseFloat(newDeal.totalAmount)
       });
 
       setIsNewDealOpen(false);
-      setNewDeal({ chatId: "", vendorId: "", title: "", description: "", totalAmount: "" });
+      setNewDeal({ chatId: "", vendorId: "", title: "", description: "", terms: "", totalAmount: "" });
       loadDeals();
 
       // Automatically trigger payment
@@ -392,6 +394,15 @@ const EscrowPage = () => {
                   />
                 </div>
                 <div>
+                  <Label className="text-card-foreground">Terms & Conditions</Label>
+                  <Textarea
+                    className="mt-1.5 bg-secondary border-border"
+                    placeholder="E.g., Revision policy, delivery deadlines..."
+                    value={newDeal.terms}
+                    onChange={(e) => setNewDeal({ ...newDeal, terms: e.target.value })}
+                  />
+                </div>
+                <div>
                   <Label className="text-card-foreground">Total Amount (₹)</Label>
                   <Input
                     className="mt-1.5 bg-secondary border-border"
@@ -431,7 +442,13 @@ const EscrowPage = () => {
                         <div>
                           <CardTitle className="text-lg text-card-foreground">{deal.title}</CardTitle>
                           <p className="text-sm text-muted-foreground mt-1">{deal.description}</p>
-                          <p className="text-sm text-muted-foreground mt-1">
+                          {deal.terms && (
+                            <div className="mt-2 p-2 bg-secondary/50 rounded-md border border-border/50">
+                              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">Terms & Conditions:</p>
+                              <p className="text-xs text-muted-foreground whitespace-pre-wrap">{deal.terms}</p>
+                            </div>
+                          )}
+                          <p className="text-sm text-muted-foreground mt-2">
                             {isClient ? "Vendor" : "Client"}: {otherParty.displayName}
                           </p>
                         </div>

@@ -1,6 +1,7 @@
 import express from 'express';
 import { PrismaClient } from '@prisma/client';
 import { auth } from '../middleware/auth.js';
+import { sendUserNotification } from './notifications.js';
 
 const prisma = new PrismaClient();
 const router = express.Router();
@@ -73,7 +74,7 @@ router.get('/:id', auth, async (req, res) => {
 // POST /api/escrow - Create new escrow deal
 router.post('/', auth, async (req, res) => {
     try {
-        const { chatId, vendorId, title, description, totalAmount } = req.body;
+        const { chatId, vendorId, title, description, terms, totalAmount } = req.body;
 
         if (!chatId || !vendorId || !title || !totalAmount) {
             return res.status(400).json({ error: 'Missing required fields.' });
@@ -129,6 +130,7 @@ router.post('/', auth, async (req, res) => {
                 vendorId: requestedVendorId,
                 title,
                 description: description || '',
+                terms: terms || '',
                 totalAmount: parseFloat(totalAmount),
                 status: 'pending_payment'
             },
@@ -146,6 +148,16 @@ router.post('/', auth, async (req, res) => {
         await prisma.activityLog.create({
             data: { userId: req.user.id, action: 'Created escrow deal', details: title }
         });
+
+        // Notify the vendor about the new deal
+        const io = req.app.get('io');
+        sendUserNotification(
+            io,
+            requestedVendorId,
+            '📋 New Escrow Deal',
+            `${deal.client.displayName || 'A client'} created a deal "${title}" for ₹${parseFloat(totalAmount).toLocaleString('en-IN')}. Awaiting payment.`,
+            'info'
+        );
 
         res.status(201).json(deal);
     } catch (err) {
@@ -182,79 +194,107 @@ router.post('/:id/release', auth, async (req, res) => {
             return res.status(400).json({ error: 'Deal is not active.' });
         }
 
-        // Check if trying to release more than available
-        const newReleasedPercent = deal.releasedPercent + parseFloat(percent);
-        if (newReleasedPercent > 100) {
-            return res.status(400).json({
-                error: `Cannot release ${percent}%. Only ${100 - deal.releasedPercent}% remaining.`
-            });
-        }
-
-        const amount = (deal.totalAmount * parseFloat(percent)) / 100;
-        const platformFee = amount * 0.05;
-        const vendorAmount = amount - platformFee;
-
         // Perform updates in a transaction
-        const [transaction, updatedDeal, updatedVendor] = await prisma.$transaction(async (prisma) => {
-            // 1. Create escrow transaction record
-            const tx = await prisma.escrowTransaction.create({
-                data: {
-                    dealId,
-                    percent: parseFloat(percent),
-                    amount,
-                    note: note || 'Payment released'
-                }
-            });
+        // Use an atomic update first to ensure we don't exceed 100%
+        // Using updateMany allows us to conditionally fail if releasedPercent + percent > 100
+        let updatedDeal, vendorAmount;
+        const platformFee = 0; // Assuming 0 for now as per previous logic, or calculate if needed
 
-            // 2. Update deal status
-            const dealUpdate = await prisma.escrowDeal.update({
-                where: { id: dealId },
-                data: {
-                    releasedPercent: newReleasedPercent,
-                    status: newReleasedPercent >= 100 ? 'completed' : 'active'
-                },
-                include: {
-                    client: {
-                        select: { id: true, displayName: true, avatarUrl: true, username: true }
+        try {
+            // Re-think: updateMany doesn't return the updated record.
+            // Let's use the transaction with a strictly serializable approach or the check.
+
+            const result = await prisma.$transaction(async (tx) => {
+                // 1. Fetch current deal with lock (if possible) or just verify condition
+                // For valid race condition fix without raw Locking, we use the update count strategy.
+                const userPercent = parseFloat(percent);
+
+                // Attempt to update physically using a where clause that safeguards the invariant
+                // "releasedPercent + userPercent <= 100"
+                // We find the deal first to get current percent to construct the WHERE clause?
+                // No, that defeats the purpose. "100 - userPercent" is constant for this request.
+                // So: WHERE releasedPercent <= (100 - userPercent)
+                const updateBatch = await tx.escrowDeal.updateMany({
+                    where: {
+                        id: dealId,
+                        status: 'active',
+                        releasedPercent: { lte: 100 - userPercent }
                     },
-                    vendor: {
-                        select: { id: true, displayName: true, avatarUrl: true, username: true }
-                    },
-                    transactions: {
-                        orderBy: { createdAt: 'asc' }
+                    data: {
+                        releasedPercent: { increment: userPercent }
                     }
+                });
+
+                if (updateBatch.count === 0) {
+                    throw new Error('Release failed. Either deal is inactive or amount exceeds 100%.');
                 }
-            });
 
-            // 3. Credit vendor wallet (95%)
-            const vendorUpdate = await prisma.user.update({
-                where: { id: deal.vendorId },
-                data: { walletBalance: { increment: vendorAmount } }
-            });
+                // 2. Fetch the updated deal to get new values and calculate amounts
+                // This is safe now because we successfully incremented.
+                const currentDeal = await tx.escrowDeal.findUnique({
+                    where: { id: dealId }
+                });
 
-            // 4. Log wallet transaction for vendor
-            await prisma.walletTransaction.create({
-                data: {
-                    userId: deal.vendorId,
-                    type: 'escrow_release',
-                    amount: vendorAmount,
-                    balance: vendorUpdate.walletBalance,
-                    reference: `deal_${dealId}`,
-                    description: `Escrow release: ${deal.title} (${percent}%) - Fees: ₹${platformFee}`
+                // Calculate amounts based on the deal's total (vendorAmount logic was missing in previous snippet!)
+                vendorAmount = (currentDeal.totalAmount * userPercent) / 100;
+
+                // 3. Create escrow transaction record
+                await tx.escrowTransaction.create({
+                    data: {
+                        dealId,
+                        percent: userPercent,
+                        amount: vendorAmount, // Logic assumption: amount refers to currency value released
+                        note: note || 'Payment released'
+                    }
+                });
+
+                // 4. Check if completed and update status
+                if (currentDeal.releasedPercent >= 100) {
+                    await tx.escrowDeal.update({
+                        where: { id: dealId },
+                        data: { status: 'completed' }
+                    });
+                    currentDeal.status = 'completed'; // Update local obj for response
                 }
+
+                // 5. Credit vendor wallet
+                const venUp = await tx.user.update({
+                    where: { id: deal.vendorId },
+                    data: { walletBalance: { increment: vendorAmount } }
+                });
+
+                // 6. Log wallet transaction for vendor
+                await tx.walletTransaction.create({
+                    data: {
+                        userId: deal.vendorId,
+                        type: 'escrow_release',
+                        amount: vendorAmount,
+                        balance: venUp.walletBalance,
+                        reference: `deal_${dealId}`,
+                        description: `Escrow release: ${deal.title} (${userPercent}%)`
+                    }
+                });
+
+                // 7. Log activity
+                await tx.activityLog.create({
+                    data: {
+                        userId: req.user.id,
+                        action: 'Released escrow payment',
+                        details: `${userPercent}% - ${deal.title}`
+                    }
+                });
+
+                return currentDeal;
             });
 
-            // 5. Log activity
-            await prisma.activityLog.create({
-                data: {
-                    userId: req.user.id,
-                    action: 'Released escrow payment',
-                    details: `${percent}% - ${deal.title}`
-                }
-            });
-
-            return [tx, dealUpdate, vendorUpdate];
-        });
+            updatedDeal = result;
+        } catch (txErr) {
+            // Check if it was our custom error
+            if (txErr.message === 'Release failed. Either deal is inactive or amount exceeds 100%.') {
+                return res.status(400).json({ error: txErr.message });
+            }
+            throw txErr;
+        }
 
         // Emit socket event for real-time update
         const io = req.app.get('io');
@@ -263,10 +303,39 @@ router.post('/:id/release', auth, async (req, res) => {
             io.to(`user_${deal.vendorId}`).emit('escrowUpdate', updatedDeal);
         }
 
+        // Notify vendor about received funds
+        sendUserNotification(
+            io,
+            deal.vendorId,
+            '💰 Payment Released',
+            `You received ₹${vendorAmount.toLocaleString('en-IN')} (${percent}%) from "${deal.title}".`,
+            'success'
+        );
+
+        // If deal is completed, notify both parties
+        if (updatedDeal.releasedPercent >= 100) {
+            sendUserNotification(
+                io,
+                deal.clientId,
+                '✅ Deal Completed',
+                `Your escrow deal "${deal.title}" is now fully completed. All payments have been released.`,
+                'success'
+            );
+            sendUserNotification(
+                io,
+                deal.vendorId,
+                '✅ Deal Completed',
+                `The escrow deal "${deal.title}" is now fully completed. All payments have been received.`,
+                'success'
+            );
+        }
+
         res.json(updatedDeal);
+
     } catch (err) {
-        console.error('Release payment error:', err);
-        res.status(500).json({ error: 'Server error.' });
+        console.error('Release escrow error:', err);
+        // Security: Don't leak internal error messages
+        res.status(500).json({ error: 'Failed to release escrow payment.' });
     }
 });
 

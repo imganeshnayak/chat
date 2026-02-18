@@ -43,6 +43,7 @@ model User {
   phoneNumber          String?               @map("phone_number")
 
   sentNotifications    Notification[]        @relation("SentNotifications")
+  targetNotifications  Notification[]        @relation("TargetNotifications")
   notificationReads    NotificationRead[]
 
   @@map("users")
@@ -130,6 +131,7 @@ model EscrowDeal {
   vendorId          Int                  @map("vendor_id")
   title             String
   description       String?
+  terms             String?
   totalAmount       Float                @map("total_amount")
   releasedPercent   Float                @default(0) @map("released_percent")
   status            String               @default("pending_payment") // pending_payment, active, completed, cancelled
@@ -183,7 +185,7 @@ model PaymentLog {
   type              String   // escrow, verification
   entityId          Int      @map("entity_id") // ID of EscrowDeal or VerificationRequest
   razorpayOrderId   String?  @map("razorpay_order_id")
-  razorpayPaymentId String?  @map("razorpay_payment_id")
+  razorpayPaymentId String?  @unique @map("razorpay_payment_id")
   amount            Float
   currency          String   @default("INR")
   status            String   // created, paid, failed, refunded
@@ -237,15 +239,17 @@ model PayoutRequest {
 }
 
 model Notification {
-  id        Int      @id @default(autoincrement())
-  title     String
-  message   String
-  type      String   @default("info") // info, warning, success, alert
-  sentBy    Int      @map("sent_by")
-  createdAt DateTime @default(now()) @map("created_at")
+  id           Int      @id @default(autoincrement())
+  title        String
+  message      String
+  type         String   @default("info") // info, warning, success, alert
+  sentBy       Int?     @map("sent_by")
+  targetUserId Int?     @map("target_user_id")
+  createdAt    DateTime @default(now()) @map("created_at")
 
-  admin User               @relation("SentNotifications", fields: [sentBy], references: [id])
-  reads NotificationRead[]
+  admin      User?              @relation("SentNotifications", fields: [sentBy], references: [id])
+  targetUser User?              @relation("TargetNotifications", fields: [targetUserId], references: [id])
+  reads      NotificationRead[]
 
   @@map("notifications")
 }
@@ -254,6 +258,7 @@ model NotificationRead {
   id             Int      @id @default(autoincrement())
   notificationId Int      @map("notification_id")
   userId         Int      @map("user_id")
+  isDeleted      Boolean  @default(false) @map("is_deleted")
   readAt         DateTime @default(now()) @map("read_at")
 
   notification Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)

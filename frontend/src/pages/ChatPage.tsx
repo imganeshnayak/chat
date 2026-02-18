@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   Search, Send, Paperclip, Smile, ArrowLeft, Image, FileText,
   Mic, MoreVertical, DollarSign, User as UserIcon, Plus,
-  Trash2, Ban, AlertTriangle, Download, X, CheckCircle2, Loader2, LogOut, Settings, User
+  Trash2, Ban, AlertTriangle, Download, X, CheckCircle2, Loader2, LogOut, Settings, User, HelpCircle, ShieldCheck
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
@@ -40,7 +40,7 @@ import {
 import {
   getChatList, getMessages, sendMessage, markMessagesAsRead, uploadFile,
   searchUsers, blockUser, reportUser, clearChatHistory, getUser,
-  deleteMessage, deleteMessagesBatch,
+  deleteMessage, deleteMessagesBatch, getSupportChat,
   Chat as ChatType, Message as MessageType, AuthUser
 } from "@/lib/api";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -84,7 +84,8 @@ const ConversationList = ({
   selectedChat,
   setSelectedChat,
   user,
-  onLogout
+  onLogout,
+  onSupport
 }: {
   searchQuery: string;
   setSearchQuery: (val: string) => void;
@@ -97,6 +98,7 @@ const ConversationList = ({
   setSelectedChat: (chat: ChatType | null) => void;
   user: AuthUser | null;
   onLogout: () => void;
+  onSupport: () => void;
 }) => (
   <div className="flex flex-col h-full bg-background overflow-hidden">
     {/* Header */}
@@ -105,6 +107,15 @@ const ConversationList = ({
         <h1 className="text-xl font-bold text-foreground">Chats</h1>
         {user && (
           <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={onSupport}
+              title="Help Center"
+              className="text-primary hover:text-primary hover:bg-primary/10"
+            >
+              <HelpCircle className="h-5 w-5" />
+            </Button>
             <NotificationBell />
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -221,7 +232,15 @@ const ConversationList = ({
             </div>
             <div className="flex-1 min-w-0 text-left">
               <div className="flex justify-between items-center">
-                <span className="font-medium text-foreground truncate">{chat.display_name}</span>
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <span className="font-medium text-foreground truncate">{chat.display_name}</span>
+                  {chat.isOfficial && (
+                    <Badge variant="secondary" className="bg-primary/10 text-primary text-[10px] h-4 px-1.5 border-none flex items-center gap-0.5">
+                      <ShieldCheck className="h-3 w-3" />
+                      OFFICIAL
+                    </Badge>
+                  )}
+                </div>
                 <span className="text-xs text-muted-foreground">
                   {chat.last_message_time ? formatTime(chat.last_message_time) : ""}
                 </span>
@@ -388,11 +407,18 @@ const ChatView = ({
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-1.5">
                 <h3 className="font-semibold text-foreground truncate">{selectedChat.display_name}</h3>
-                {selectedChat.verified && (
+                {selectedChat.isOfficial ? (
+                  <Badge variant="secondary" className="bg-primary/10 text-primary text-[10px] px-1.5 border-none flex items-center gap-0.5">
+                    <ShieldCheck className="h-3.5 w-3.5" />
+                    OFFICIAL
+                  </Badge>
+                ) : selectedChat.verified && (
                   <img src="/verified-badge.svg" alt="Verified" className="h-5 w-5 flex-shrink-0" title="Verified Account" />
                 )}
               </div>
-              <p className="text-xs text-muted-foreground">@{selectedChat.username}</p>
+              <p className="text-xs text-muted-foreground">
+                {selectedChat.isOfficial ? "Official Support Channel" : `@${selectedChat.username}`}
+              </p>
             </div>
             <div className="flex gap-1">
               <Button variant="ghost" size="icon" onClick={() => navigate(`/profile/${selectedChat.user_id}`)}>
@@ -1086,6 +1112,39 @@ const ChatPage = () => {
     }
   }, [pendingFile, selectedChat, user, loadMessages, loadChats]);
 
+  const handleSupport = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      const { admin } = await getSupportChat();
+
+      // Start chat with admin
+      const supportChat: ChatType = {
+        chat_id: `support_${user?.id}`,
+        last_message: "Official Support & Notifications",
+        last_message_time: new Date().toISOString(),
+        user_id: admin.id,
+        display_name: "Help Center",
+        avatar_url: admin.avatarUrl,
+        username: admin.username,
+        unread_count: 0,
+        verified: true,
+        isOfficial: true,
+      };
+
+      setSelectedChat(supportChat);
+      setSearchQuery("");
+      setMessages([]);
+    } catch (err) {
+      toast({
+        title: "Support Unavailable",
+        description: err instanceof Error ? err.message : "Failed to connect to support",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  }, [user?.id, toast]);
+
   const filteredChats = chats.filter((c) =>
     c.display_name.toLowerCase().includes(searchQuery.toLowerCase())
   );
@@ -1133,6 +1192,7 @@ const ChatPage = () => {
             setSelectedChat={setSelectedChat}
             user={user}
             onLogout={handleLogout}
+            onSupport={handleSupport}
           />
         )}
       </div>
@@ -1155,6 +1215,7 @@ const ChatPage = () => {
           setSelectedChat={setSelectedChat}
           user={user}
           onLogout={handleLogout}
+          onSupport={handleSupport}
         />
       </div>
       <div className="flex-1 h-full overflow-hidden">

@@ -11,8 +11,9 @@ export default function setupSocket(io) {
         socket.on('join', ({ userId, chatId }) => {
             onlineUsers.set(userId, socket.id);
             socket.join(chatId);
+            socket.join(`user_${userId}`); // Join personal room for notifications
             io.emit('userOnline', { userId, online: true });
-            console.log(`👤 User ${userId} joined chat ${chatId}`);
+            console.log(`👤 User ${userId} joined chat ${chatId} and personal room`);
         });
 
         socket.on('message', async (data) => {

@@ -1,6 +1,7 @@
 import express from 'express';
 import { PrismaClient } from '@prisma/client';
 import { auth } from '../middleware/auth.js';
+import { sendUserNotification } from './notifications.js';
 
 const prisma = new PrismaClient();
 const router = express.Router();
@@ -106,6 +107,15 @@ router.post('/payout/request', auth, async (req, res) => {
 
             return payoutRequest;
         });
+
+        const io = req.app.get('io');
+        sendUserNotification(
+            io,
+            req.user.id,
+            '💸 Payout Requested',
+            `Your payout request for ₹${amount.toLocaleString('en-IN')} has been submitted. It will be processed within 24-48 hours.`,
+            'info'
+        );
 
         res.json(result);
     } catch (err) {

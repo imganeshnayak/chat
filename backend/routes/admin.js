@@ -2,6 +2,7 @@ import express from 'express';
 import { PrismaClient } from '@prisma/client';
 import { auth, adminOnly } from '../middleware/auth.js';
 import { processPayoutAutomatically } from '../services/razorpayPayouts.js';
+import { sendUserNotification } from './notifications.js';
 
 const prisma = new PrismaClient();
 const router = express.Router();
@@ -534,6 +535,26 @@ router.put('/payouts/:id', auth, adminOnly, async (req, res) => {
                 details: `Payout ID: ${payout.id}, Status: ${status}`
             }
         });
+
+        // Notify user about payout status change
+        const io = req.app.get('io');
+        let notificationTitle = '💸 Payout Update';
+        let notificationMessage = `Your payout request of ₹${payout.amount.toLocaleString('en-IN')} is now ${status}.`;
+        let notificationType = 'info';
+
+        if (status === 'completed') {
+            notificationTitle = '✅ Payout Completed';
+            notificationMessage = `Your payout of ₹${payout.amount.toLocaleString('en-IN')} has been successfully processed.`;
+            notificationType = 'success';
+        } else if (status === 'failed' || status === 'cancelled') {
+            notificationTitle = status === 'failed' ? '❌ Payout Failed' : '❌ Payout Cancelled';
+            notificationMessage = `Your payout of ₹${payout.amount.toLocaleString('en-IN')} was ${status}. ${adminNote ? 'Reason: ' + adminNote : 'The amount has been refunded to your wallet.'}`;
+            notificationType = 'alert';
+        } else if (status === 'processing') {
+            notificationMessage = `Your payout of ₹${payout.amount.toLocaleString('en-IN')} is now being processed.`;
+        }
+
+        sendUserNotification(io, payout.userId, notificationTitle, notificationMessage, notificationType);
 
         res.json(updatedPayout);
     } catch (err) {

@@ -52,9 +52,63 @@ router.get('/chats/list', auth, async (req, res) => {
             }
         }
 
+        // Ensure "Help Center" (Support Admin) is always in the list
+        const supportChatId = `support_${req.user.id}`;
+        if (!chatMap.has(supportChatId)) {
+            const admin = await prisma.user.findFirst({
+                where: { role: 'admin', status: 'active' },
+                select: { id: true, username: true, displayName: true, avatarUrl: true, verified: true }
+            });
+
+            if (admin) {
+                chatMap.set(supportChatId, {
+                    chat_id: supportChatId,
+                    last_message: "Official Support & Notifications",
+                    last_message_time: new Date().toISOString(),
+                    user_id: admin.id,
+                    display_name: "Help Center",
+                    avatar_url: admin.avatarUrl,
+                    username: admin.username,
+                    unread_count: 0,
+                    verified: true,
+                    isOfficial: true // Special flag for frontend
+                });
+            }
+        } else {
+            // Update existing support chat entry with branding
+            const supportEntry = chatMap.get(supportChatId);
+            supportEntry.display_name = "Help Center";
+            supportEntry.isOfficial = true;
+        }
+
         res.json(Array.from(chatMap.values()));
     } catch (err) {
         console.error('Get chats error:', err);
+        res.status(500).json({ error: 'Server error.' });
+    }
+});
+
+// GET /api/messages/support - Get the Help Center details
+router.get('/support', auth, async (req, res) => {
+    try {
+        // Find first active admin
+        const admin = await prisma.user.findFirst({
+            where: { role: 'admin', status: 'active' },
+            select: { id: true, username: true, displayName: true, avatarUrl: true, verified: true }
+        });
+
+        if (!admin) {
+            return res.status(404).json({ error: 'Support team not available.' });
+        }
+
+        const chatId = `support_${req.user.id}`;
+
+        res.json({
+            admin: { ...admin, displayName: "Help Center" },
+            chatId
+        });
+    } catch (err) {
+        console.error('Get support error:', err);
         res.status(500).json({ error: 'Server error.' });
     }
 });
