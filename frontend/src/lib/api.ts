@@ -67,6 +67,7 @@ export function registerUser(data: {
   email: string;
   password: string;
   display_name?: string;
+  otp: string;
 }): Promise<AuthResponse> {
   return apiFetch<AuthResponse>("/api/auth/register", {
     method: "POST",
@@ -315,6 +316,8 @@ export interface AdminStats {
   activeEscrowDeals: number;
   totalEscrowValue: number;
   recentActivity: number;
+  pendingPayouts: number;
+  totalPayoutValue: number;
 }
 
 export interface AdminReport {
@@ -470,6 +473,97 @@ export interface EscrowTransaction {
   createdAt: string;
 }
 
+
+// ============ Wallet API ============
+
+export interface WalletTransaction {
+  id: number;
+  userId: number;
+  type: string;
+  amount: number;
+  balance: number;
+  reference?: string;
+  description: string;
+  createdAt: string;
+}
+
+export interface PayoutRequest {
+  id: number;
+  userId: number;
+  amount: number;
+  status: string;
+  paymentMethod?: string; // 'bank' or 'upi'
+  bankAccount?: string;
+  ifscCode?: string;
+  accountName: string;
+  upiVpa?: string;
+  razorpayPayoutId?: string;
+  razorpayFundAccountId?: string;
+  razorpayContactId?: string;
+  adminNote?: string;
+  requestedAt: string;
+  processedAt?: string;
+  user?: {
+    id: number;
+    username: string;
+    displayName: string;
+    email: string;
+  };
+}
+
+export function getWalletBalance(): Promise<{ balance: number }> {
+  return apiFetch<{ balance: number }>("/api/wallet/balance");
+}
+
+export function getWalletTransactions(): Promise<WalletTransaction[]> {
+  return apiFetch<WalletTransaction[]>("/api/wallet/transactions");
+}
+
+export function requestPayout(data: {
+  amount: number;
+  paymentMethod?: string;
+  bankAccount?: string;
+  ifscCode?: string;
+  accountName: string;
+  upiVpa?: string;
+}): Promise<PayoutRequest> {
+  return apiFetch<PayoutRequest>("/api/wallet/payout/request", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export function getPayoutRequests(): Promise<PayoutRequest[]> {
+  return apiFetch<PayoutRequest[]>("/api/wallet/payout/requests");
+}
+
+// ============ Admin Payout API ============
+
+export function getAdminPayouts(page = 1, limit = 20, status = ''): Promise<{
+  payouts: PayoutRequest[];
+  total: number;
+  page: number;
+  totalPages: number;
+}> {
+  const params = new URLSearchParams({
+    page: page.toString(),
+    limit: limit.toString(),
+    ...(status && { status })
+  });
+  return apiFetch(`/api/admin/payouts?${params.toString()}`);
+}
+
+export function updatePayoutStatus(id: number, data: {
+  status: string;
+  adminNote?: string;
+  razorpayPayoutId?: string;
+}): Promise<PayoutRequest> {
+  return apiFetch<PayoutRequest>(`/api/admin/payouts/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+}
+
 export interface EscrowDeal {
   id: number;
   chatId: string;
@@ -480,6 +574,10 @@ export interface EscrowDeal {
   totalAmount: number;
   releasedPercent: number;
   status: string;
+  razorpayOrderId?: string;
+  razorpayPaymentId?: string;
+  paymentStatus?: string;
+  paidAmount?: number;
   createdAt: string;
   updatedAt: string;
   client: {
@@ -545,6 +643,12 @@ export function updateEscrowDeal(
   });
 }
 
+export function deleteEscrowDeal(dealId: number): Promise<{ success: boolean; message: string }> {
+  return apiFetch<{ success: boolean; message: string }>(`/api/escrow/${dealId}`, {
+    method: "DELETE",
+  });
+}
+
 // ============ Verification API ============
 
 export interface VerificationRequest {
@@ -593,5 +697,82 @@ export function rejectVerificationRequest(
   return apiFetch<{ message: string }>(`/api/verification/requests/${requestId}/reject`, {
     method: "PUT",
     body: JSON.stringify({ adminNote }),
+  });
+}
+
+//============ Payment API ============
+
+export interface PaymentOrder {
+  orderId: string;
+  amount: number;
+  currency: string;
+  key_id: string;
+  dealId?: number;
+  requestId?: number;
+  title?: string;
+}
+
+export function initiateEscrowPayment(dealId: number): Promise<PaymentOrder> {
+  return apiFetch<PaymentOrder>("/api/payments/escrow/initiate", {
+    method: "POST",
+    body: JSON.stringify({ dealId }),
+  });
+}
+
+export function initiateVerificationPayment(): Promise<PaymentOrder> {
+  return apiFetch<PaymentOrder>("/api/payments/verification/initiate", {
+    method: "POST",
+  });
+}
+
+export function verifyPayment(data: {
+  orderId: string;
+  paymentId: string;
+  signature: string;
+  type: "escrow" | "verification";
+  entityId: number;
+}): Promise<{ message: string; status: string }> {
+  return apiFetch<{ message: string; status: string }>("/api/payments/verify", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+// ============ Notifications API ============
+
+export interface Notification {
+  id: number;
+  title: string;
+  message: string;
+  type: "info" | "warning" | "success" | "alert";
+  createdAt: string;
+  sentBy: string;
+  isRead: boolean;
+}
+
+export function getNotifications(): Promise<Notification[]> {
+  return apiFetch<Notification[]>("/api/notifications");
+}
+
+export function markNotificationRead(id: number): Promise<{ success: boolean }> {
+  return apiFetch<{ success: boolean }>(`/api/notifications/${id}/read`, {
+    method: "POST",
+  });
+}
+
+export function markAllNotificationsRead(): Promise<{ success: boolean }> {
+  return apiFetch<{ success: boolean }>("/api/notifications/read-all", {
+    method: "POST",
+  });
+}
+
+export function broadcastNotification(data: {
+  title: string;
+  message: string;
+  type: "info" | "warning" | "success" | "alert";
+}): Promise<{ success: boolean }> {
+  return apiFetch<{ success: boolean }>("/api/notifications/broadcast", {
+    method: "POST",
+    body: JSON.stringify(data),
   });
 }

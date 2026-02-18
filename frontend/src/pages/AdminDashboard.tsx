@@ -16,8 +16,9 @@ import {
 import {
   MessageSquare, Users, DollarSign, Shield, Search,
   Eye, Ban, AlertTriangle, ChevronRight, TrendingUp,
-  Activity, UserCheck, Trash2, CheckCircle2
+  Activity, UserCheck, Trash2, CheckCircle2, LogOut, Wallet, Bell, Send
 } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import {
@@ -34,17 +35,23 @@ import {
   getVerificationRequests,
   approveVerificationRequest,
   rejectVerificationRequest,
+  getAdminPayouts,
+  updatePayoutStatus,
+  broadcastNotification,
+  getNotifications,
+  Notification,
   VerificationRequest,
   AdminStats,
   AdminUser,
-  AdminReport
+  AdminReport,
+  PayoutRequest
 } from "@/lib/api";
 
-type AdminTab = "overview" | "users" | "chats" | "escrow" | "activity" | "reports" | "verifications";
+type AdminTab = "overview" | "users" | "chats" | "escrow" | "activity" | "reports" | "verifications" | "payouts" | "broadcast";
 
 const AdminDashboard = () => {
   const { toast } = useToast();
-  const { user, isLoading: authLoading } = useAuth();
+  const { user, isLoading: authLoading, logout } = useAuth();
   const navigate = useNavigate();
 
   const [activeTab, setActiveTab] = useState<AdminTab>("overview");
@@ -56,8 +63,14 @@ const AdminDashboard = () => {
   const [activities, setActivities] = useState<any[]>([]);
   const [reports, setReports] = useState<AdminReport[]>([]);
   const [verificationRequests, setVerificationRequests] = useState<VerificationRequest[]>([]);
+  const [payouts, setPayouts] = useState<PayoutRequest[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState("all");
+  const [broadcastTitle, setBroadcastTitle] = useState("");
+  const [broadcastMessage, setBroadcastMessage] = useState("");
+  const [broadcastType, setBroadcastType] = useState<"info" | "warning" | "success" | "alert">("info");
+  const [isBroadcasting, setIsBroadcasting] = useState(false);
+  const [sentNotifications, setSentNotifications] = useState<Notification[]>([]);
 
   useEffect(() => {
     if (!user && !authLoading) {
@@ -77,6 +90,13 @@ const AdminDashboard = () => {
       loadData();
     }
   }, [user, authLoading, navigate]);
+
+  // Load broadcast history when broadcast tab is opened
+  useEffect(() => {
+    if (activeTab === "broadcast" && user) {
+      getNotifications().then(setSentNotifications).catch(() => { });
+    }
+  }, [activeTab, user]);
 
   const loadData = async () => {
     setIsLoading(true);
@@ -102,6 +122,9 @@ const AdminDashboard = () => {
       } else if (activeTab === "verifications") {
         const verificationsData = await getVerificationRequests(statusFilter === "all" ? "" : statusFilter);
         setVerificationRequests(verificationsData);
+      } else if (activeTab === "payouts") {
+        const payoutsData = await getAdminPayouts(1, 20, statusFilter === "all" ? "" : statusFilter);
+        setPayouts(payoutsData.payouts);
       }
     } catch (err) {
       toast({
@@ -208,14 +231,44 @@ const AdminDashboard = () => {
     }
   };
 
+  const handleUpdatePayoutStatus = async (payoutId: number, status: string) => {
+    const adminNote = status === 'processing' || status === 'completed'
+      ? prompt("Enter transaction reference/note (optional):")
+      : (status === 'cancelled' ? prompt("Enter cancellation reason:") : undefined);
+
+    if (status === 'cancelled' && !adminNote) return;
+
+    try {
+      await updatePayoutStatus(payoutId, {
+        status,
+        adminNote: adminNote || undefined
+      });
+      toast({ title: "Payout Updated", description: `Payout marked as ${status}` });
+      loadData();
+    } catch (err) {
+      toast({
+        title: "Error",
+        description: err instanceof Error ? err.message : "Failed to update payout",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleLogout = () => {
+    logout();
+    navigate("/login");
+  };
+
   const tabs = [
     { id: "overview" as const, label: "Overview", icon: TrendingUp },
     { id: "users" as const, label: "Users", icon: Users, count: stats?.totalUsers },
     { id: "chats" as const, label: "Chats", icon: MessageSquare, count: stats?.totalChats },
     { id: "escrow" as const, label: "Escrow", icon: DollarSign, count: stats?.totalEscrowDeals },
     { id: "verifications" as const, label: "Verifications", icon: CheckCircle2 },
+    { id: "payouts" as const, label: "Payouts", icon: Wallet },
     { id: "reports" as const, label: "Reports", icon: AlertTriangle },
     { id: "activity" as const, label: "Activity", icon: Activity },
+    { id: "broadcast" as const, label: "Broadcast", icon: Bell },
   ];
 
   if (isLoading && !stats) {
@@ -252,10 +305,19 @@ const AdminDashboard = () => {
             </button>
           ))}
         </nav>
-        <div className="mt-auto">
+        <div className="mt-auto space-y-2">
           <Link to="/chat">
             <Button variant="outline" size="sm" className="w-full">Back to App</Button>
           </Link>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="w-full justify-start text-destructive hover:text-destructive hover:bg-destructive/10"
+            onClick={handleLogout}
+          >
+            <LogOut className="h-4 w-4 mr-2" />
+            Logout
+          </Button>
         </div>
       </div>
 
@@ -281,7 +343,7 @@ const AdminDashboard = () => {
             <h1 className="text-2xl font-bold text-foreground capitalize">{activeTab}</h1>
             {activeTab !== "overview" && (
               <div className="flex gap-2">
-                {(activeTab === "users" || activeTab === "escrow" || activeTab === "verifications") && (
+                {(activeTab === "users" || activeTab === "escrow" || activeTab === "verifications" || activeTab === "payouts") && (
                   <Select value={statusFilter} onValueChange={setStatusFilter}>
                     <SelectTrigger className="w-32">
                       <SelectValue placeholder="All Status" />
@@ -696,6 +758,240 @@ const AdminDashboard = () => {
                     </Card>
                   ))
                 )}
+              </div>
+            )}
+
+            {activeTab === "payouts" && (
+              <div className="space-y-4">
+                <div className="flex gap-4 mb-6">
+                  <Card className="flex-1 bg-card border-border">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm font-medium text-muted-foreground">Pending Requests</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-2xl font-bold">{stats?.pendingPayouts || 0}</div>
+                    </CardContent>
+                  </Card>
+                  <Card className="flex-1 bg-card border-border">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm font-medium text-muted-foreground">Total Payouts</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-2xl font-bold">₹{(stats?.totalPayoutValue || 0).toLocaleString()}</div>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {payouts.length === 0 ? (
+                  <div className="text-center py-12 bg-card rounded-lg border border-border">
+                    <Wallet className="h-12 w-12 text-muted-foreground mx-auto mb-3 opacity-50" />
+                    <h3 className="text-lg font-medium text-foreground">No Payout Requests</h3>
+                    <p className="text-muted-foreground">There are no payout requests to show.</p>
+                  </div>
+                ) : (
+                  payouts.map((payout) => (
+                    <Card key={payout.id} className="bg-card border-border">
+                      <CardContent className="p-6">
+                        <div className="flex flex-col md:flex-row justify-between gap-4">
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xl font-bold text-primary">₹{payout.amount.toLocaleString()}</span>
+                              <Badge variant={
+                                payout.status === 'completed' ? 'default' :
+                                  payout.status === 'pending' ? 'secondary' :
+                                    payout.status === 'failed' || payout.status === 'cancelled' ? 'destructive' : 'outline'
+                              } className={payout.status === 'pending' ? 'bg-yellow-500/10 text-yellow-600 hover:bg-yellow-500/20' : ''}>
+                                {payout.status.charAt(0).toUpperCase() + payout.status.slice(1)}
+                              </Badge>
+                            </div>
+                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                              <span>Requested by <b>{payout.user?.displayName}</b></span>
+                              <span>•</span>
+                              <span>{new Date(payout.requestedAt).toLocaleDateString()}</span>
+                            </div>
+                            <div className="mt-2 p-3 bg-secondary/30 rounded-md text-sm">
+                              <div className="grid grid-cols-2 gap-x-8 gap-y-1">
+                                <span className="text-muted-foreground">Payment Method:</span>
+                                <Badge variant="outline" className="w-fit uppercase">
+                                  {payout.paymentMethod || 'bank'}
+                                </Badge>
+
+                                {payout.paymentMethod === 'upi' ? (
+                                  <>
+                                    <span className="text-muted-foreground">UPI ID:</span>
+                                    <span className="font-mono">{payout.upiVpa}</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <span className="text-muted-foreground">Bank Account:</span>
+                                    <span className="font-mono">{payout.bankAccount}</span>
+                                    <span className="text-muted-foreground">IFSC:</span>
+                                    <span className="font-mono">{payout.ifscCode}</span>
+                                  </>
+                                )}
+
+                                <span className="text-muted-foreground">Account Name:</span>
+                                <span className="font-medium">{payout.accountName}</span>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex flex-col gap-2 min-w-[140px] justify-center">
+                            {payout.status === 'pending' && (
+                              <>
+                                <Button size="sm" onClick={() => handleUpdatePayoutStatus(payout.id, 'processing')}>
+                                  Mark Processing
+                                </Button>
+                                <Button size="sm" variant="outline" onClick={() => handleUpdatePayoutStatus(payout.id, 'cancelled')}>
+                                  Cancel & Refund
+                                </Button>
+                              </>
+                            )}
+                            {payout.status === 'processing' && (
+                              <>
+                                <Button size="sm" className="bg-green-600 hover:bg-green-700" onClick={() => handleUpdatePayoutStatus(payout.id, 'completed')}>
+                                  Mark Completed
+                                </Button>
+                                <Button size="sm" variant="destructive" onClick={() => handleUpdatePayoutStatus(payout.id, 'failed')}>
+                                  Mark Failed
+                                </Button>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))
+                )}
+              </div>
+            )}
+            {activeTab === "broadcast" && (
+              <div className="space-y-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h2 className="text-xl font-semibold flex items-center gap-2">
+                      <Bell className="h-5 w-5 text-primary" />
+                      Broadcast to All Users
+                    </h2>
+                    <p className="text-sm text-muted-foreground mt-1">Send a notification to every user instantly</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  {/* Send Form */}
+                  <Card className="lg:col-span-1 h-fit">
+                    <CardHeader>
+                      <CardTitle className="text-base flex items-center gap-2"><Send className="h-4 w-4" /> New Broadcast</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div>
+                        <label className="text-sm font-medium mb-1 block">Type</label>
+                        <div className="flex gap-2 flex-wrap">
+                          {(["info", "warning", "success", "alert"] as const).map(t => (
+                            <button
+                              key={t}
+                              onClick={() => setBroadcastType(t)}
+                              className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${broadcastType === t
+                                ? t === "info" ? "bg-blue-500/20 border-blue-500 text-blue-400"
+                                  : t === "warning" ? "bg-yellow-500/20 border-yellow-500 text-yellow-400"
+                                    : t === "success" ? "bg-green-500/20 border-green-500 text-green-400"
+                                      : "bg-red-500/20 border-red-500 text-red-400"
+                                : "border-border text-muted-foreground hover:border-primary/50"
+                                }`}
+                            >
+                              {t === "info" ? "🔵" : t === "warning" ? "🟡" : t === "success" ? "🟢" : "🔴"}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium mb-1 block">Title</label>
+                        <Input
+                          placeholder="e.g. System Maintenance"
+                          value={broadcastTitle}
+                          onChange={e => setBroadcastTitle(e.target.value)}
+                          maxLength={100}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium mb-1 block">Message</label>
+                        <Textarea
+                          placeholder="Write your message..."
+                          value={broadcastMessage}
+                          onChange={e => setBroadcastMessage(e.target.value)}
+                          rows={4}
+                          maxLength={500}
+                        />
+                        <p className="text-xs text-muted-foreground mt-1 text-right">{broadcastMessage.length}/500</p>
+                      </div>
+                      <Button
+                        className="w-full"
+                        disabled={!broadcastTitle.trim() || !broadcastMessage.trim() || isBroadcasting}
+                        onClick={async () => {
+                          setIsBroadcasting(true);
+                          try {
+                            await broadcastNotification({ title: broadcastTitle.trim(), message: broadcastMessage.trim(), type: broadcastType });
+                            toast({ title: "📢 Broadcast Sent!", description: `All users have been notified.` });
+                            setBroadcastTitle("");
+                            setBroadcastMessage("");
+                            // Refresh history
+                            const notifs = await getNotifications();
+                            setSentNotifications(notifs);
+                          } catch (err) {
+                            toast({ title: "Error", description: err instanceof Error ? err.message : "Failed to send", variant: "destructive" });
+                          } finally {
+                            setIsBroadcasting(false);
+                          }
+                        }}
+                      >
+                        {isBroadcasting ? "Sending..." : "📢 Send Broadcast"}
+                      </Button>
+                    </CardContent>
+                  </Card>
+
+                  {/* History */}
+                  <div className="lg:col-span-2">
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="text-sm font-semibold text-muted-foreground flex items-center gap-2">
+                        <Activity className="h-4 w-4" /> Broadcast History
+                      </h3>
+                      <button
+                        className="text-xs text-primary hover:underline"
+                        onClick={async () => { const n = await getNotifications(); setSentNotifications(n); }}
+                      >Refresh</button>
+                    </div>
+                    {sentNotifications.length === 0 ? (
+                      <div className="text-center py-12 bg-card rounded-lg border border-border">
+                        <Bell className="h-8 w-8 mx-auto mb-2 opacity-30" />
+                        No broadcasts sent yet
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {sentNotifications.map(n => (
+                          <Card key={n.id} className="p-4 bg-card border-border">
+                            <div className="flex items-start gap-3">
+                              <span className="text-xl">
+                                {n.type === "info" ? "🔵" : n.type === "warning" ? "🟡" : n.type === "success" ? "🟢" : "🔴"}
+                              </span>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex justify-between items-start">
+                                  <p className="font-semibold text-card-foreground">{n.title}</p>
+                                  <span className="text-[10px] text-muted-foreground">
+                                    {new Date(n.createdAt).toLocaleString()}
+                                  </span>
+                                </div>
+                                <p className="text-sm text-muted-foreground mt-1">{n.message}</p>
+                                <p className="text-[10px] text-muted-foreground mt-2 border-t border-border pt-2">
+                                  Sent by Admin ID: {n.sentBy}
+                                </p>
+                              </div>
+                            </div>
+                          </Card>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
             )}
           </ScrollArea>

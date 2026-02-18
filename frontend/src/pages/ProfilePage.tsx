@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, Share2, Copy, Mail, Phone, MessageSquare, Twitter, Instagram, Linkedin, Github, Globe, Plus, Trash2, ExternalLink, Star, CheckCircle2 } from "lucide-react";
+import { ArrowLeft, Share2, Copy, Mail, Phone, MessageSquare, Twitter, Instagram, Linkedin, Github, Globe, Plus, Trash2, ExternalLink, Star, CheckCircle2, LogOut } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { getUser, updateUserProfile, uploadAvatar, rateUser, AuthUser, applyForVerification, getVerificationStatus, getVerificationFee, VerificationRequest } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
@@ -47,7 +47,7 @@ const SocialIcon = ({ platform }: { platform: string }) => {
 
 const ProfilePage = () => {
   const { userId } = useParams();
-  const { user: currentUser, isLoading: authLoading } = useAuth();
+  const { user: currentUser, isLoading: authLoading, logout } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
   const [user, setUser] = useState<AuthUser | null>(null);
@@ -160,6 +160,11 @@ const ProfilePage = () => {
     } catch (err) {
       toast({ title: "Error", description: err instanceof Error ? err.message : "Failed to submit rating", variant: "destructive" });
     }
+  };
+
+  const handleLogout = () => {
+    logout();
+    navigate("/login");
   };
 
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -414,9 +419,14 @@ const ProfilePage = () => {
                 {/* Actions */}
                 <div className="mt-10 flex flex-col gap-3">
                   {isOwnProfile && (
-                    <Button className="w-full shadow-lg shadow-primary/20" onClick={() => setIsEditing(true)}>
-                      <Edit2 className="mr-2 h-4 w-4" /> Edit My Profile
-                    </Button>
+                    <>
+                      <Button className="w-full shadow-lg shadow-primary/20" onClick={() => setIsEditing(true)}>
+                        <Edit2 className="mr-2 h-4 w-4" /> Edit My Profile
+                      </Button>
+                      <Button variant="ghost" className="w-full text-destructive hover:bg-destructive/10" onClick={handleLogout}>
+                        <LogOut className="mr-2 h-4 w-4" /> Logout
+                      </Button>
+                    </>
                   )}
                   {!isOwnProfile && (
                     <>

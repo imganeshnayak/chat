@@ -1,17 +1,93 @@
 import express from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import crypto from 'crypto';
 import { PrismaClient } from '@prisma/client';
 import { auth } from '../middleware/auth.js';
+import { generateOtp, sendRegistrationOtp, sendPasswordResetOtp } from '../services/emailService.js';
 
 const prisma = new PrismaClient();
 const router = express.Router();
 
+// ─────────────────────────────────────────────────────────────────
+// STEP 1: Send OTP to email before registration
+// POST /api/auth/send-otp
+// ─────────────────────────────────────────────────────────────────
+router.post('/send-otp', async (req, res) => {
+    try {
+        const { email } = req.body;
+        if (!email) return res.status(400).json({ error: 'Email is required.' });
+
+        // Check if email already registered
+        const existing = await prisma.user.findUnique({ where: { email } });
+        if (existing) return res.status(400).json({ error: 'Email already registered.' });
+
+        // Invalidate any previous OTPs for this email
+        await prisma.otpCode.updateMany({
+            where: { email, type: 'registration', used: false },
+            data: { used: true }
+        });
+
+        // Generate and save OTP (expires in 10 minutes)
+        const otp = generateOtp();
+        const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+
+        // Security: Hash OTP before storing
+        const hashedOtp = await bcrypt.hash(otp, 10);
+
+        await prisma.otpCode.create({
+            data: { email, code: hashedOtp, type: 'registration', expiresAt }
+        });
+
+        // Send email
+        await sendRegistrationOtp(email, otp);
+
+        // Security: Removed detailed email/OTP logging
+        res.json({ success: true, message: 'OTP sent to your email.' });
+    } catch (err) {
+        console.error('Send OTP error:', err);
+        res.status(500).json({ error: 'Failed to send OTP. Please check your email address.' });
+    }
+});
+
+// ─────────────────────────────────────────────────────────────────
+// STEP 2: Register with OTP verification
 // POST /api/auth/register
+// ─────────────────────────────────────────────────────────────────
 router.post('/register', async (req, res) => {
     try {
-        const { username, email, password, display_name } = req.body;
+        const { username, email, password, display_name, otp } = req.body;
 
+        // Security: OTP is now mandatory for registration
+        if (!otp) {
+            return res.status(400).json({ error: 'OTP is required for registration.' });
+        }
+
+        const otpRecord = await prisma.otpCode.findFirst({
+            where: {
+                email,
+                type: 'registration',
+                used: false,
+                expiresAt: { gt: new Date() }
+            },
+            orderBy: { createdAt: 'desc' }
+        });
+
+        if (!otpRecord || !(await bcrypt.compare(otp, otpRecord.code))) {
+            return res.status(400).json({ error: 'Invalid or expired OTP. Please request a new one.' });
+        }
+
+        // Potential race condition: OTP marked used atomically
+        const updatedOtp = await prisma.otpCode.updateMany({
+            where: { id: otpRecord.id, used: false },
+            data: { used: true }
+        });
+
+        if (updatedOtp.count === 0) {
+            return res.status(400).json({ error: 'OTP already used or expired.' });
+        }
+
+        // Check existing user
         const existing = await prisma.user.findFirst({
             where: { OR: [{ email }, { username }] },
         });
@@ -40,7 +116,9 @@ router.post('/register', async (req, res) => {
     }
 });
 
+// ─────────────────────────────────────────────────────────────────
 // POST /api/auth/login
+// ─────────────────────────────────────────────────────────────────
 router.post('/login', async (req, res) => {
     try {
         const { email, password } = req.body;
@@ -75,7 +153,9 @@ router.post('/login', async (req, res) => {
     }
 });
 
+// ─────────────────────────────────────────────────────────────────
 // GET /api/auth/me
+// ─────────────────────────────────────────────────────────────────
 router.get('/me', auth, async (req, res) => {
     try {
         const user = await prisma.user.findUnique({
@@ -94,9 +174,139 @@ router.get('/me', auth, async (req, res) => {
     }
 });
 
-import crypto from 'crypto';
+// ─────────────────────────────────────────────────────────────────
+// FORGOT PASSWORD — Step 1: Send reset OTP
+// POST /api/auth/forgot-password
+// ─────────────────────────────────────────────────────────────────
+router.post('/forgot-password', async (req, res) => {
+    try {
+        const { email } = req.body;
+        if (!email) return res.status(400).json({ error: 'Email is required.' });
 
+        const user = await prisma.user.findUnique({ where: { email } });
+        // Always return success to prevent email enumeration
+        if (!user) {
+            return res.json({ success: true, message: 'If this email exists, a reset code has been sent.' });
+        }
+
+        // Invalidate previous reset OTPs
+        await prisma.otpCode.updateMany({
+            where: { email, type: 'password_reset', used: false },
+            data: { used: true }
+        });
+
+        // Generate and save OTP
+        const otp = generateOtp();
+        const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+
+        // Security: Hash OTP before storing
+        const hashedOtp = await bcrypt.hash(otp, 10);
+
+        await prisma.otpCode.create({
+            data: { email, code: hashedOtp, type: 'password_reset', expiresAt }
+        });
+
+        await sendPasswordResetOtp(email, otp);
+
+        res.json({ success: true, message: 'If this email exists, a reset code has been sent.' });
+    } catch (err) {
+        console.error('Forgot password error:', err);
+        res.status(500).json({ error: 'Failed to send reset email.' });
+    }
+});
+
+// ─────────────────────────────────────────────────────────────────
+// FORGOT PASSWORD — Step 2: Verify OTP
+// POST /api/auth/verify-reset-otp
+// ─────────────────────────────────────────────────────────────────
+router.post('/verify-reset-otp', async (req, res) => {
+    try {
+        const { email, otp } = req.body;
+
+        const otpRecord = await prisma.otpCode.findFirst({
+            where: {
+                email,
+                type: 'password_reset',
+                used: false,
+                expiresAt: { gt: new Date() }
+            },
+            orderBy: { createdAt: 'desc' }
+        });
+
+        if (!otpRecord || !(await bcrypt.compare(otp, otpRecord.code))) {
+            return res.status(400).json({ error: 'Invalid or expired OTP.' });
+        }
+
+        // Potential race condition: Mark OTP as used immediately after verification
+        const updatedOtp = await prisma.otpCode.updateMany({
+            where: { id: otpRecord.id, used: false },
+            data: { used: true }
+        });
+
+        if (updatedOtp.count === 0) {
+            return res.status(400).json({ error: 'OTP already used.' });
+        }
+
+        // Return a short-lived reset token
+        const resetToken = jwt.sign(
+            { email, purpose: 'password_reset' },
+            process.env.JWT_SECRET,
+            { expiresIn: '15m' }
+        );
+
+        res.json({ success: true, resetToken });
+    } catch (err) {
+        console.error('Verify reset OTP error:', err);
+        res.status(500).json({ error: 'Server error.' });
+    }
+});
+
+// ─────────────────────────────────────────────────────────────────
+// FORGOT PASSWORD — Step 3: Set new password
+// POST /api/auth/reset-password
+// ─────────────────────────────────────────────────────────────────
+router.post('/reset-password', async (req, res) => {
+    try {
+        const { resetToken, newPassword } = req.body;
+
+        if (!resetToken || !newPassword) {
+            return res.status(400).json({ error: 'Reset token and new password are required.' });
+        }
+
+        if (newPassword.length < 6) {
+            return res.status(400).json({ error: 'Password must be at least 6 characters.' });
+        }
+
+        // Verify reset token
+        let decoded;
+        try {
+            decoded = jwt.verify(resetToken, process.env.JWT_SECRET);
+        } catch {
+            return res.status(400).json({ error: 'Invalid or expired reset token.' });
+        }
+
+        if (decoded.purpose !== 'password_reset') {
+            return res.status(400).json({ error: 'Invalid token.' });
+        }
+
+        // Update password
+        const hashedPassword = await bcrypt.hash(newPassword, 10);
+        await prisma.user.update({
+            where: { email: decoded.email },
+            data: { password: hashedPassword }
+        });
+
+        res.json({ success: true, message: 'Password reset successfully. Please login.' });
+    } catch (err) {
+        console.error('Reset password error:', err);
+        res.status(500).json({ error: 'Server error.' });
+    }
+});
+
+// ─────────────────────────────────────────────────────────────────
+// Telegram Login
 // POST /api/auth/telegram
+// ─────────────────────────────────────────────────────────────────
 router.post('/telegram', async (req, res) => {
     try {
         const { auth_data } = req.body;
@@ -107,8 +317,6 @@ router.post('/telegram', async (req, res) => {
             return res.status(500).json({ error: 'Telegram Bot Token not configured.' });
         }
 
-        // 1. Verify integrity of data
-        // Handle both wrapped {auth_data: data} and raw data
         const payload = auth_data || req.body;
 
         if (!payload || !payload.hash) {
@@ -129,25 +337,22 @@ router.post('/telegram', async (req, res) => {
             return res.status(401).json({ error: 'Data integrity check failed.' });
         }
 
-        // 2. Check if data is expired (auth_date is in seconds)
         if (Date.now() / 1000 - data.auth_date > 86400) {
             return res.status(401).json({ error: 'Authentication data expired.' });
         }
 
-        // 3. Find or create user
         let user = await prisma.user.findFirst({
             where: { telegramId: data.id.toString() }
         });
 
         if (!user) {
-            // ... (upsert logic)
             user = await prisma.user.upsert({
                 where: { username: data.username || `tg_${data.id}` },
                 update: { telegramId: data.id.toString() },
                 create: {
                     username: data.username || `tg_${data.id}`,
-                    email: `${data.id}@telegram.user`, // Mock email
-                    password: crypto.randomBytes(16).toString('hex'), // Random password
+                    email: `${data.id}@telegram.user`,
+                    password: crypto.randomBytes(16).toString('hex'),
                     displayName: `${data.first_name} ${data.last_name || ''}`.trim(),
                     avatarUrl: data.photo_url,
                     telegramId: data.id.toString(),

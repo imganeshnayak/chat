@@ -83,20 +83,50 @@ router.post('/', auth, async (req, res) => {
             return res.status(400).json({ error: 'Total amount must be greater than 0.' });
         }
 
-        // Verify vendor exists to prevent foreign key violation P2003
+        // Security: Validate chatId format (should be 'chat_userId1_userId2' or 'chat_userId1_userId2_timestamp')
+        if (!chatId.startsWith('chat_')) {
+            return res.status(400).json({ error: 'Invalid chat ID format.' });
+        }
+
+        // Extract user IDs from chatId (format: chat_1_2 or chat_1_2_1234567890)
+        const chatParts = chatId.split('_');
+        if (chatParts.length < 3 || chatParts.length > 4) {
+            return res.status(400).json({ error: 'Invalid chat ID format.' });
+        }
+
+        const chatUserIds = [parseInt(chatParts[1]), parseInt(chatParts[2])].sort();
+        const currentUserId = req.user.id;
+        const requestedVendorId = parseInt(vendorId);
+
+        // Security: Verify current user is part of this chat
+        if (!chatUserIds.includes(currentUserId)) {
+            return res.status(403).json({ error: 'You are not a participant in this chat.' });
+        }
+
+        // Security: Verify vendor exists
         const vendor = await prisma.user.findUnique({
-            where: { id: parseInt(vendorId) }
+            where: { id: requestedVendorId }
         });
 
         if (!vendor) {
             return res.status(404).json({ error: 'Vendor not found. Please double check the User ID.' });
         }
 
+        // Security: Verify vendor is the other participant in the chat
+        if (!chatUserIds.includes(requestedVendorId)) {
+            return res.status(403).json({ error: 'Vendor must be a participant in this chat.' });
+        }
+
+        // Prevent creating deal with yourself
+        if (requestedVendorId === currentUserId) {
+            return res.status(400).json({ error: 'Cannot create escrow deal with yourself.' });
+        }
+
         const deal = await prisma.escrowDeal.create({
             data: {
                 chatId,
                 clientId: req.user.id,
-                vendorId: parseInt(vendorId),
+                vendorId: requestedVendorId,
                 title,
                 description: description || '',
                 totalAmount: parseFloat(totalAmount),
@@ -161,43 +191,69 @@ router.post('/:id/release', auth, async (req, res) => {
         }
 
         const amount = (deal.totalAmount * parseFloat(percent)) / 100;
+        const platformFee = amount * 0.05;
+        const vendorAmount = amount - platformFee;
 
-        // Create transaction
-        const transaction = await prisma.escrowTransaction.create({
-            data: {
-                dealId,
-                percent: parseFloat(percent),
-                amount,
-                note: note || 'Payment released'
-            }
-        });
-
-        // Update deal
-        const updatedDeal = await prisma.escrowDeal.update({
-            where: { id: dealId },
-            data: {
-                releasedPercent: newReleasedPercent,
-                status: newReleasedPercent >= 100 ? 'completed' : 'active'
-            },
-            include: {
-                client: {
-                    select: { id: true, displayName: true, avatarUrl: true, username: true }
-                },
-                vendor: {
-                    select: { id: true, displayName: true, avatarUrl: true, username: true }
-                },
-                transactions: {
-                    orderBy: { createdAt: 'asc' }
+        // Perform updates in a transaction
+        const [transaction, updatedDeal, updatedVendor] = await prisma.$transaction(async (prisma) => {
+            // 1. Create escrow transaction record
+            const tx = await prisma.escrowTransaction.create({
+                data: {
+                    dealId,
+                    percent: parseFloat(percent),
+                    amount,
+                    note: note || 'Payment released'
                 }
-            }
-        });
+            });
 
-        await prisma.activityLog.create({
-            data: {
-                userId: req.user.id,
-                action: 'Released escrow payment',
-                details: `${percent}% - ${deal.title}`
-            }
+            // 2. Update deal status
+            const dealUpdate = await prisma.escrowDeal.update({
+                where: { id: dealId },
+                data: {
+                    releasedPercent: newReleasedPercent,
+                    status: newReleasedPercent >= 100 ? 'completed' : 'active'
+                },
+                include: {
+                    client: {
+                        select: { id: true, displayName: true, avatarUrl: true, username: true }
+                    },
+                    vendor: {
+                        select: { id: true, displayName: true, avatarUrl: true, username: true }
+                    },
+                    transactions: {
+                        orderBy: { createdAt: 'asc' }
+                    }
+                }
+            });
+
+            // 3. Credit vendor wallet (95%)
+            const vendorUpdate = await prisma.user.update({
+                where: { id: deal.vendorId },
+                data: { walletBalance: { increment: vendorAmount } }
+            });
+
+            // 4. Log wallet transaction for vendor
+            await prisma.walletTransaction.create({
+                data: {
+                    userId: deal.vendorId,
+                    type: 'escrow_release',
+                    amount: vendorAmount,
+                    balance: vendorUpdate.walletBalance,
+                    reference: `deal_${dealId}`,
+                    description: `Escrow release: ${deal.title} (${percent}%) - Fees: ₹${platformFee}`
+                }
+            });
+
+            // 5. Log activity
+            await prisma.activityLog.create({
+                data: {
+                    userId: req.user.id,
+                    action: 'Released escrow payment',
+                    details: `${percent}% - ${deal.title}`
+                }
+            });
+
+            return [tx, dealUpdate, vendorUpdate];
         });
 
         // Emit socket event for real-time update
@@ -259,6 +315,40 @@ router.put('/:id', auth, async (req, res) => {
         res.json(updatedDeal);
     } catch (err) {
         console.error('Update escrow deal error:', err);
+        res.status(500).json({ error: 'Server error.' });
+    }
+});
+
+// DELETE /api/escrow/:id - Delete unpaid escrow deal
+router.delete('/:id', auth, async (req, res) => {
+    try {
+        const dealId = parseInt(req.params.id);
+
+        const deal = await prisma.escrowDeal.findUnique({
+            where: { id: dealId }
+        });
+
+        if (!deal) {
+            return res.status(404).json({ error: 'Deal not found' });
+        }
+
+        // Only the client can delete
+        if (deal.clientId !== req.user.id) {
+            return res.status(403).json({ error: 'Only the client can delete this deal' });
+        }
+
+        // Only allow deletion of unpaid deals
+        if (deal.paymentStatus === 'paid') {
+            return res.status(400).json({ error: 'Cannot delete a paid deal' });
+        }
+
+        await prisma.escrowDeal.delete({
+            where: { id: dealId }
+        });
+
+        res.json({ success: true, message: 'Deal deleted successfully' });
+    } catch (err) {
+        console.error('Delete escrow deal error:', err);
         res.status(500).json({ error: 'Server error.' });
     }
 });

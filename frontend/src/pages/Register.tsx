@@ -1,29 +1,72 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Send } from "lucide-react";
+import { Send, Mail, CheckCircle2, Loader2 } from "lucide-react";
 import TelegramLogin from "@/components/TelegramLogin";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/contexts/AuthContext";
+import { apiFetch } from "@/lib/api";
+
+type Step = "form" | "otp";
 
 const Register = () => {
   const navigate = useNavigate();
   const { register, isLoading } = useAuth();
+  const [step, setStep] = useState<Step>("form");
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
+  const [otp, setOtp] = useState("");
   const [error, setError] = useState("");
+  const [isSendingOtp, setIsSendingOtp] = useState(false);
+  const [otpSent, setOtpSent] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  // Step 1: Send OTP to email
+  const handleSendOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setIsSendingOtp(true);
+    try {
+      await apiFetch("/api/auth/send-otp", {
+        method: "POST",
+        body: JSON.stringify({ email }),
+      });
+      setOtpSent(true);
+      setStep("otp");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to send OTP");
+    } finally {
+      setIsSendingOtp(false);
+    }
+  };
+
+  // Step 2: Verify OTP and register
+  const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     try {
-      await register(username, email, password, displayName);
+      await register(username, email, password, displayName, otp);
       navigate("/chat");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Registration failed");
+    }
+  };
+
+  const handleResendOtp = async () => {
+    setError("");
+    setIsSendingOtp(true);
+    try {
+      await apiFetch("/api/auth/send-otp", {
+        method: "POST",
+        body: JSON.stringify({ email }),
+      });
+      setError("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to resend OTP");
+    } finally {
+      setIsSendingOtp(false);
     }
   };
 
@@ -32,76 +75,102 @@ const Register = () => {
       <div className="w-full max-w-sm">
         <div className="flex items-center gap-2 justify-center mb-8">
           <Send className="h-8 w-8 text-primary" />
-          <span className="text-2xl font-bold text-foreground">ChatPay</span>
+          <span className="text-2xl font-bold text-foreground">Vesper</span>
         </div>
 
         <div className="bg-card border border-border rounded-xl p-6">
-          <div className="text-center mb-6">
-            <h2 className="text-xl font-semibold text-card-foreground mb-1">Create Account</h2>
-            <p className="text-sm text-muted-foreground font-medium text-primary">Primary Signup Method:</p>
-            <TelegramLogin />
-          </div>
+          {step === "form" ? (
+            <>
+              <div className="text-center mb-6">
+                <h2 className="text-xl font-semibold text-card-foreground mb-1">Create Account</h2>
+                <p className="text-sm text-muted-foreground font-medium text-primary">Primary Signup Method:</p>
+                <TelegramLogin />
+              </div>
 
-          <div className="relative my-6">
-            <div className="absolute inset-0 flex items-center">
-              <span className="w-full border-t border-border"></span>
-            </div>
-            <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-card px-2 text-muted-foreground tracking-widest">Or register with email</span>
-            </div>
-          </div>
+              <div className="relative my-6">
+                <div className="absolute inset-0 flex items-center">
+                  <span className="w-full border-t border-border"></span>
+                </div>
+                <div className="relative flex justify-center text-xs uppercase">
+                  <span className="bg-card px-2 text-muted-foreground tracking-widest">Or register with email</span>
+                </div>
+              </div>
 
-          {error && <div className="mb-4 p-3 bg-destructive text-destructive-foreground rounded-lg text-sm">{error}</div>}
+              {error && <div className="mb-4 p-3 bg-destructive/20 text-destructive-foreground border border-destructive/30 rounded-lg text-sm">{error}</div>}
 
-          <form onSubmit={handleSubmit} className="space-y-3">
-            <div>
-              <Label className="text-card-foreground">Username</Label>
-              <Input
-                className="mt-1.5 bg-secondary border-border"
-                placeholder="username"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                required
-              />
-            </div>
-            <div>
-              <Label className="text-card-foreground">Display Name</Label>
-              <Input
-                className="mt-1.5 bg-secondary border-border"
-                placeholder="Your Name"
-                value={displayName}
-                onChange={(e) => setDisplayName(e.target.value)}
-              />
-            </div>
-            <div>
-              <Label className="text-card-foreground">Email</Label>
-              <Input
-                className="mt-1.5 bg-secondary border-border"
-                type="email"
-                placeholder="you@example.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-              />
-            </div>
-            <div>
-              <Label className="text-card-foreground">Password</Label>
-              <Input
-                className="mt-1.5 bg-secondary border-border"
-                type="password"
-                placeholder="••••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-              />
-            </div>
-            <Button type="submit" className="w-full" disabled={isLoading}>
-              {isLoading ? "Creating account..." : "Sign Up"}
-            </Button>
-          </form>
+              <form onSubmit={handleSendOtp} className="space-y-3">
+                <div>
+                  <Label className="text-card-foreground">Username</Label>
+                  <Input className="mt-1.5 bg-secondary border-border" placeholder="username" value={username} onChange={(e) => setUsername(e.target.value)} required />
+                </div>
+                <div>
+                  <Label className="text-card-foreground">Display Name</Label>
+                  <Input className="mt-1.5 bg-secondary border-border" placeholder="Your Name" value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
+                </div>
+                <div>
+                  <Label className="text-card-foreground">Email</Label>
+                  <Input className="mt-1.5 bg-secondary border-border" type="email" placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} required />
+                </div>
+                <div>
+                  <Label className="text-card-foreground">Password</Label>
+                  <Input className="mt-1.5 bg-secondary border-border" type="password" placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={6} />
+                </div>
+                <Button type="submit" className="w-full" disabled={isSendingOtp}>
+                  {isSendingOtp ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Sending OTP...</> : "Continue →"}
+                </Button>
+              </form>
+            </>
+          ) : (
+            <>
+              {/* OTP Step */}
+              <div className="text-center mb-6">
+                <div className="w-14 h-14 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-3">
+                  <Mail className="w-7 h-7 text-primary" />
+                </div>
+                <h2 className="text-xl font-semibold text-card-foreground mb-1">Check your email</h2>
+                <p className="text-sm text-muted-foreground">
+                  We sent a 6-digit code to<br />
+                  <strong className="text-foreground">{email}</strong>
+                </p>
+              </div>
+
+              {error && <div className="mb-4 p-3 bg-destructive/20 text-destructive-foreground border border-destructive/30 rounded-lg text-sm">{error}</div>}
+
+              <form onSubmit={handleRegister} className="space-y-4">
+                <div>
+                  <Label className="text-card-foreground">Enter OTP Code</Label>
+                  <Input
+                    className="mt-1.5 bg-secondary border-border text-center text-2xl font-mono tracking-widest"
+                    placeholder="000000"
+                    value={otp}
+                    onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                    maxLength={6}
+                    required
+                  />
+                </div>
+                <Button type="submit" className="w-full" disabled={otp.length !== 6 || isLoading}>
+                  {isLoading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Creating account...</> : <><CheckCircle2 className="w-4 h-4 mr-2" />Verify & Create Account</>}
+                </Button>
+              </form>
+
+              <div className="mt-4 text-center space-y-2">
+                <button
+                  onClick={handleResendOtp}
+                  disabled={isSendingOtp}
+                  className="text-sm text-primary hover:underline disabled:opacity-50"
+                >
+                  {isSendingOtp ? "Resending..." : "Resend OTP"}
+                </button>
+                <br />
+                <button onClick={() => { setStep("form"); setOtp(""); setError(""); }} className="text-xs text-muted-foreground hover:underline">
+                  ← Change email
+                </button>
+              </div>
+            </>
+          )}
 
           <p className="text-xs text-muted-foreground mt-4 text-center">
-            By signing up, you agree to ChatPay's Terms of Service and Privacy Policy
+            By signing up, you agree to Vesper's Terms of Service and Privacy Policy
           </p>
         </div>
 

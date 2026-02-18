@@ -6,10 +6,11 @@ import { Badge } from "@/components/ui/badge";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, CheckCircle2, Clock, XCircle } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Clock, LogOut, XCircle } from "lucide-react";
 import { useEffect, useState } from "react";
-import { getVerificationStatus, getVerificationFee, applyForVerification, VerificationRequest } from "@/lib/api";
+import { getVerificationStatus, getVerificationFee, applyForVerification, VerificationRequest, initiateVerificationPayment, verifyPayment } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
+import { useRazorpay } from "@/hooks/useRazorpay";
 import {
     Dialog,
     DialogContent,
@@ -19,9 +20,10 @@ import {
 } from "@/components/ui/dialog";
 
 const SettingsPage = () => {
-    const { user } = useAuth();
+    const { user, logout } = useAuth();
     const navigate = useNavigate();
     const { toast } = useToast();
+    const { openCheckout } = useRazorpay();
     const [verificationRequest, setVerificationRequest] = useState<VerificationRequest | null>(null);
     const [verificationFee, setVerificationFee] = useState(109);
     const [isVerificationDialogOpen, setIsVerificationDialogOpen] = useState(false);
@@ -44,21 +46,71 @@ const SettingsPage = () => {
         }
     };
 
+    const handleLogout = () => {
+        logout();
+        navigate("/login");
+    };
+
     const handleApplyForVerification = async () => {
         setIsApplying(true);
         try {
-            const request = await applyForVerification({});
-            setVerificationRequest(request);
-            setIsVerificationDialogOpen(false);
-            toast({
-                title: "Application Submitted!",
-                description: "Your verification request has been submitted for review."
+            // Initiate payment
+            const paymentOrder = await initiateVerificationPayment();
+
+            // Open Razorpay checkout
+            openCheckout({
+                orderId: paymentOrder.orderId,
+                amount: paymentOrder.amount,
+                currency: paymentOrder.currency,
+                name: "Verification Payment",
+                description: `Get verified badge for ₹${verificationFee}`,
+                onSuccess: async (response) => {
+                    // Verify payment with backend
+                    try {
+                        if (!paymentOrder.requestId) {
+                            throw new Error("Verification request ID missing from payment initiation.");
+                        }
+
+                        await verifyPayment({
+                            orderId: response.razorpay_order_id,
+                            paymentId: response.razorpay_payment_id,
+                            signature: response.razorpay_signature,
+                            type: "verification",
+                            entityId: paymentOrder.requestId,
+                        });
+
+                        toast({
+                            title: "Payment Successful!",
+                            description: "Your verification request has been submitted for review.",
+                        });
+
+                        setIsVerificationDialogOpen(false);
+                        loadVerificationData();
+                    } catch (err) {
+                        toast({
+                            title: "Verification Failed",
+                            description: err instanceof Error ? err.message : "Failed to verify payment",
+                            variant: "destructive",
+                        });
+                    }
+                },
+                onFailure: (error) => {
+                    toast({
+                        title: "Payment Failed",
+                        description: error.message || "Payment could not be processed",
+                        variant: "destructive",
+                    });
+                },
+                userDetails: {
+                    name: user?.displayName,
+                    email: user?.email,
+                },
             });
         } catch (err) {
             toast({
                 title: "Error",
-                description: err instanceof Error ? err.message : "Failed to submit verification request",
-                variant: "destructive"
+                description: err instanceof Error ? err.message : "Failed to initiate payment",
+                variant: "destructive",
             });
         } finally {
             setIsApplying(false);
@@ -69,6 +121,7 @@ const SettingsPage = () => {
         if (!verificationRequest) return null;
 
         const statusConfig = {
+            pending_payment: { icon: Clock, text: "Awaiting Payment", className: "bg-orange-500/10 text-orange-500" },
             pending: { icon: Clock, text: "Pending Review", className: "bg-yellow-500/10 text-yellow-500" },
             approved: { icon: CheckCircle2, text: "Approved", className: "bg-green-500/10 text-green-500" },
             rejected: { icon: XCircle, text: "Rejected", className: "bg-red-500/10 text-red-500" }
@@ -289,6 +342,19 @@ const SettingsPage = () => {
                         </div>
                     </DialogContent>
                 </Dialog>
+                {/* Logout Section */}
+                <Card className="mt-6 border-destructive/20 bg-destructive/5">
+                    <CardContent className="pt-6">
+                        <Button
+                            variant="destructive"
+                            className="w-full flex items-center justify-center gap-2"
+                            onClick={handleLogout}
+                        >
+                            <LogOut className="h-4 w-4" />
+                            Logout
+                        </Button>
+                    </CardContent>
+                </Card>
             </div>
         </div>
     );

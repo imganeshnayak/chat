@@ -7,7 +7,7 @@ interface AuthContextType {
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
   loginWithTelegram: (data: any) => Promise<void>;
-  register: (username: string, email: string, password: string, displayName?: string) => Promise<void>;
+  register: (username: string, email: string, password: string, displayName: string | undefined, otp: string) => Promise<void>;
   logout: () => void;
   refreshUser: () => Promise<void>;
 }
@@ -65,10 +65,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const register = async (username: string, email: string, password: string, displayName?: string) => {
+  const register = async (username: string, email: string, password: string, displayName: string | undefined, otp: string) => {
     setIsLoading(true);
     try {
-      const response = await apiRegister({ username, email, password, display_name: displayName });
+      const response = await apiRegister({ username, email, password, display_name: displayName, otp });
       setToken(response.token);
       setUser(response.user);
       localStorage.setItem('authToken', response.token);

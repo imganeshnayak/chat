@@ -1,6 +1,7 @@
 import express from 'express';
 import { PrismaClient } from '@prisma/client';
 import { auth, adminOnly } from '../middleware/auth.js';
+import { processPayoutAutomatically } from '../services/razorpayPayouts.js';
 
 const prisma = new PrismaClient();
 const router = express.Router();
@@ -16,7 +17,9 @@ router.get('/stats', auth, adminOnly, async (req, res) => {
             totalEscrowDeals,
             activeEscrowDeals,
             totalEscrowValue,
-            recentActivity
+            recentActivity,
+            pendingPayouts,
+            totalPayoutValue
         ] = await Promise.all([
             prisma.user.count(),
             prisma.user.count({ where: { status: 'active' } }),
@@ -32,6 +35,11 @@ router.get('/stats', auth, adminOnly, async (req, res) => {
             }),
             prisma.activityLog.count({
                 where: { createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) } }
+            }),
+            prisma.payoutRequest.count({ where: { status: 'pending' } }),
+            prisma.payoutRequest.aggregate({
+                where: { status: 'completed' },
+                _sum: { amount: true }
             })
         ]);
 
@@ -43,7 +51,9 @@ router.get('/stats', auth, adminOnly, async (req, res) => {
             totalEscrowDeals,
             activeEscrowDeals,
             totalEscrowValue: totalEscrowValue._sum.totalAmount || 0,
-            recentActivity
+            recentActivity,
+            pendingPayouts,
+            totalPayoutValue: totalPayoutValue._sum.amount || 0
         });
     } catch (err) {
         console.error('Stats error:', err);
@@ -367,6 +377,167 @@ router.put('/users/:id/role', auth, adminOnly, async (req, res) => {
         res.json(user);
     } catch (err) {
         console.error('Update user role error:', err);
+        res.status(500).json({ error: 'Server error.' });
+    }
+});
+
+// GET /api/admin/payouts - Get all payout requests
+router.get('/payouts', auth, adminOnly, async (req, res) => {
+    try {
+        const { page = 1, limit = 20, status = '' } = req.query;
+        const skip = (parseInt(page) - 1) * parseInt(limit);
+
+        const where = status ? { status } : {};
+
+        const [payouts, total] = await Promise.all([
+            prisma.payoutRequest.findMany({
+                where,
+                include: {
+                    user: { select: { id: true, username: true, displayName: true, email: true } }
+                },
+                orderBy: { requestedAt: 'desc' },
+                skip,
+                take: parseInt(limit)
+            }),
+            prisma.payoutRequest.count({ where })
+        ]);
+
+        res.json({
+            payouts,
+            total,
+            page: parseInt(page),
+            totalPages: Math.ceil(total / parseInt(limit))
+        });
+    } catch (err) {
+        console.error('Get payouts error:', err);
+        res.status(500).json({ error: 'Server error.' });
+    }
+});
+
+// PUT /api/admin/payouts/:id - Update payout request status
+router.put('/payouts/:id', auth, adminOnly, async (req, res) => {
+    try {
+        const { status, adminNote, razorpayPayoutId } = req.body;
+        const payoutId = parseInt(req.params.id);
+
+        if (!['pending', 'processing', 'completed', 'failed', 'cancelled'].includes(status)) {
+            return res.status(400).json({ error: "Invalid status." });
+        }
+
+        const payout = await prisma.payoutRequest.findUnique({
+            where: { id: payoutId },
+            include: { user: true }
+        });
+
+        if (!payout) {
+            return res.status(404).json({ error: "Payout request not found" });
+        }
+
+        // 🔧 MANUAL PROCESSING MODE - Automation available but disabled
+        // To enable automation: Uncomment the code block below and add RAZORPAY_ACCOUNT_NUMBER to .env
+        // 
+        // if (status === 'processing' && payout.status === 'pending' && !payout.razorpayPayoutId) {
+        //     try {
+        //         console.log(`\n🤖 Triggering automated payout for request #${payoutId}`);
+        //         const automatedPayout = await processPayoutAutomatically(payoutId);
+        //         await prisma.activityLog.create({
+        //             data: {
+        //                 userId: req.user.id,
+        //                 action: 'Automated payout initiated',
+        //                 details: `Payout ID: ${payoutId}, Razorpay ID: ${automatedPayout.razorpayPayoutId}`
+        //             }
+        //         });
+        //         return res.json(automatedPayout);
+        //     } catch (automationError) {
+        //         console.error('❌ Automated payout failed:', automationError);
+        //         
+        //         // SAFETY: Refund to wallet on automation failure
+        //         await prisma.$transaction(async (prisma) => {
+        //             await prisma.payoutRequest.update({
+        //                 where: { id: payoutId },
+        //                 data: {
+        //                     status: 'failed',
+        //                     adminNote: `Automated payout failed: ${automationError.message}`
+        //                 }
+        //             });
+        //             
+        //             const user = await prisma.user.update({
+        //                 where: { id: payout.userId },
+        //                 data: { walletBalance: { increment: payout.amount } }
+        //             });
+        //
+        //             await prisma.walletTransaction.create({
+        //                 data: {
+        //                     userId: payout.userId,
+        //                     type: 'credit',
+        //                     amount: payout.amount,
+        //                     balance: user.walletBalance,
+        //                     reference: `payout_refund_${payout.id}`,
+        //                     description: `Payout failed (automation error) - Refunded to wallet`
+        //                 }
+        //             });
+        //         });
+        //
+        //         return res.status(500).json({
+        //             error: 'Automated payout failed',
+        //             message: automationError.message,
+        //             details: 'Funds have been refunded to wallet. You can manually transfer and mark as completed.'
+        //         });
+        //     }
+        // }
+
+        // Manual status update with optimistic locking
+        const result = await prisma.payoutRequest.updateMany({
+            where: {
+                id: payoutId,
+                status: payout.status // Ensure status hasn't changed since we read it
+            },
+            data: {
+                status,
+                adminNote,
+                razorpayPayoutId,
+                processedAt: ['completed', 'failed', 'cancelled'].includes(status) ? new Date() : undefined
+            }
+        });
+
+        if (result.count === 0) {
+            return res.status(409).json({ error: "Payout status was updated by another process. Please refresh and try again." });
+        }
+
+        const updatedPayout = await prisma.payoutRequest.findUnique({ where: { id: payoutId } });
+
+        // If cancelled or failed, refund the amount to wallet
+        if (['failed', 'cancelled'].includes(status) && payout.status !== 'failed' && payout.status !== 'cancelled') {
+            await prisma.$transaction(async (prisma) => {
+                const user = await prisma.user.update({
+                    where: { id: payout.userId },
+                    data: { walletBalance: { increment: payout.amount } }
+                });
+
+                await prisma.walletTransaction.create({
+                    data: {
+                        userId: payout.userId,
+                        type: 'credit', // Refund
+                        amount: payout.amount,
+                        balance: user.walletBalance,
+                        reference: `payout_refund_${payout.id}`,
+                        description: `Payout ${status}: Refunded to wallet`
+                    }
+                });
+            });
+        }
+
+        await prisma.activityLog.create({
+            data: {
+                userId: req.user.id,
+                action: 'Updated payout status',
+                details: `Payout ID: ${payout.id}, Status: ${status}`
+            }
+        });
+
+        res.json(updatedPayout);
+    } catch (err) {
+        console.error('Update payout error:', err);
         res.status(500).json({ error: 'Server error.' });
     }
 });

@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   Search, Send, Paperclip, Smile, ArrowLeft, Image, FileText,
   Mic, MoreVertical, DollarSign, User as UserIcon, Plus,
-  Trash2, Ban, AlertTriangle, Download, X, CheckCircle2, Loader2
+  Trash2, Ban, AlertTriangle, Download, X, CheckCircle2, Loader2, LogOut, Settings, User
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
@@ -48,6 +48,7 @@ import { socketService } from "@/lib/socket";
 import { getCloudinaryDownloadUrl, downloadFile } from "@/lib/cloudinary";
 import LoadingScreen from "@/components/ui/LoadingScreen";
 import FilePreviewDialog from "@/components/chat/FilePreviewDialog";
+import NotificationBell from "@/components/NotificationBell";
 
 function formatTime(ts: string) {
   return new Date(ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
@@ -81,7 +82,9 @@ const ConversationList = ({
   isLoading,
   filteredChats,
   selectedChat,
-  setSelectedChat
+  setSelectedChat,
+  user,
+  onLogout
 }: {
   searchQuery: string;
   setSearchQuery: (val: string) => void;
@@ -92,11 +95,58 @@ const ConversationList = ({
   filteredChats: ChatType[];
   selectedChat: ChatType | null;
   setSelectedChat: (chat: ChatType | null) => void;
+  user: AuthUser | null;
+  onLogout: () => void;
 }) => (
   <div className="flex flex-col h-full bg-background overflow-hidden">
     {/* Header */}
     <div className="p-4 border-b border-border sticky top-0 z-10 bg-background/95 backdrop-blur-md">
-      <h1 className="text-xl font-bold text-foreground mb-3">Chats</h1>
+      <div className="flex items-center justify-between mb-3">
+        <h1 className="text-xl font-bold text-foreground">Chats</h1>
+        {user && (
+          <div className="flex items-center gap-1">
+            <NotificationBell />
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="rounded-full h-8 w-8 p-0 overflow-hidden border border-border">
+                  <Avatar className="h-full w-full">
+                    <AvatarImage src={user.avatarUrl} />
+                    <AvatarFallback>{user.displayName[0]}</AvatarFallback>
+                  </Avatar>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56 bg-card border-border">
+                <div className="flex items-center gap-2 p-2 px-3 border-b border-border mb-1">
+                  <Avatar className="h-8 w-8">
+                    <AvatarImage src={user.avatarUrl} />
+                    <AvatarFallback>{user.displayName[0]}</AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{user.displayName}</p>
+                    <p className="text-xs text-muted-foreground truncate">@{user.username}</p>
+                  </div>
+                </div>
+                <DropdownMenuItem onClick={() => window.location.href = '/profile'}>
+                  <User className="mr-2 h-4 w-4" /> Profile
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => window.location.href = '/wallet'}>
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="mr-2 h-4 w-4">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M21 12a2.25 2.25 0 00-2.25-2.25H15a3 3 0 11-6 0H5.25A2.25 2.25 0 003 12m18 0v6a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 18v-6m18 0V9M3 12V9m18 0a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 9m18 0V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v3" />
+                  </svg>
+                  Wallet
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => window.location.href = '/settings'}>
+                  <Settings className="mr-2 h-4 w-4" /> Settings
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={onLogout} className="text-destructive focus:text-destructive">
+                  <LogOut className="mr-2 h-4 w-4" /> Logout
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        )}
+      </div>
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <Input
@@ -261,20 +311,23 @@ const ChatView = ({
     }
   };
 
-  const [longPressTimer, setLongPressTimer] = useState<NodeJS.Timeout | null>(null);
+  const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const onTouchStart = (messageId: number) => {
     if (!isMobile) return;
-    const timer = setTimeout(() => {
+    // Clear any existing timer just in case
+    if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+
+    longPressTimerRef.current = setTimeout(() => {
       toggleMessageSelection(messageId);
+      longPressTimerRef.current = null;
     }, 500);
-    setLongPressTimer(timer);
   };
 
   const onTouchEnd = () => {
-    if (longPressTimer) {
-      clearTimeout(longPressTimer);
-      setLongPressTimer(null);
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
     }
   };
 
@@ -349,8 +402,9 @@ const ChatView = ({
                 variant="ghost"
                 size="icon"
                 onClick={() => navigate(`/escrow?chatId=${selectedChat.chat_id}&vendorId=${selectedChat.user_id}`)}
+                title="Escrow"
               >
-                <DollarSign className="h-5 w-5 text-primary" />
+                <span className="text-lg font-bold text-primary">₹</span>
               </Button>
               <ChatMoreMenu
                 chatId={selectedChat.chat_id}
@@ -718,8 +772,13 @@ const ChatMoreMenu = ({
 const ChatPage = () => {
   const isMobile = useIsMobile();
   const navigate = useNavigate();
-  const { user, isLoading: authLoading } = useAuth();
+  const { user, isLoading: authLoading, logout } = useAuth();
   const { toast } = useToast();
+
+  const handleLogout = useCallback(() => {
+    logout();
+    navigate("/login");
+  }, [logout, navigate]);
 
   const [chats, setChats] = useState<ChatType[]>([]);
   const [messages, setMessages] = useState<MessageType[]>([]);
@@ -1072,6 +1131,8 @@ const ChatPage = () => {
             filteredChats={filteredChats}
             selectedChat={selectedChat}
             setSelectedChat={setSelectedChat}
+            user={user}
+            onLogout={handleLogout}
           />
         )}
       </div>
@@ -1092,6 +1153,8 @@ const ChatPage = () => {
           filteredChats={filteredChats}
           selectedChat={selectedChat}
           setSelectedChat={setSelectedChat}
+          user={user}
+          onLogout={handleLogout}
         />
       </div>
       <div className="flex-1 h-full overflow-hidden">

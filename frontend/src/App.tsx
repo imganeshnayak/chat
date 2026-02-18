@@ -11,16 +11,18 @@ import Register from "./pages/Register";
 import ChatPage from "./pages/ChatPage";
 import ProfilePage from "./pages/ProfilePage";
 import EscrowPage from "./pages/EscrowPage";
+import WalletPage from "./pages/WalletPage";
 import AdminDashboard from "./pages/AdminDashboard";
 import AdminChatView from "./pages/AdminChatView";
 import SettingsPage from "./pages/SettingsPage";
+import ForgotPassword from "./pages/ForgotPassword";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
 
 const MainContent = () => {
   const location = useLocation();
-  const showNavbar = !["/login", "/register", "/"].includes(location.pathname);
+  const showNavbar = !["/login", "/register", "/", "/forgot-password"].includes(location.pathname);
 
   return (
     <div className={showNavbar ? "pb-16" : ""}>
@@ -28,10 +30,12 @@ const MainContent = () => {
         <Route path="/" element={<Landing />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/chat" element={<ChatPage />} />
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/profile/:userId" element={<ProfilePage />} />
         <Route path="/escrow" element={<EscrowPage />} />
+        <Route path="/wallet" element={<WalletPage />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/admin" element={<AdminDashboard />} />
         <Route path="/admin/chats/:chatId" element={<AdminChatView />} />

@@ -13,6 +13,10 @@ import adminRoutes from './routes/admin.js';
 import escrowRoutes from './routes/escrow.js';
 import moderationRoutes from './routes/moderation.js';
 import verificationRoutes from './routes/verification.js';
+import paymentRoutes from './routes/payments.js';
+import walletRoutes from './routes/wallet.js';
+import webhookRoutes from './routes/webhooks.js';
+import notificationRoutes from './routes/notifications.js';
 import setupSocket from './socket/chat.js';
 
 dotenv.config();
@@ -58,10 +62,17 @@ app.use(cors({
     },
     credentials: true,
 }));
-app.use(express.json());
+app.use(express.json({
+    verify: (req, res, buf) => {
+        req.rawBody = buf;
+    }
+}));
 app.use(express.urlencoded({ extended: true }));
 
 // API Routes
+// Webhooks (before other routes, no auth needed)
+app.use('/webhooks', webhookRoutes);
+
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/messages', messageRoutes);
@@ -69,6 +80,9 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/escrow', escrowRoutes);
 app.use('/api/moderation', moderationRoutes);
 app.use('/api/verification', verificationRoutes);
+app.use('/api/payments', paymentRoutes);
+app.use('/api/wallet', walletRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

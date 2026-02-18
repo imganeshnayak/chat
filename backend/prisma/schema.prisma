@@ -36,6 +36,15 @@ model User {
   ratingsReceived      Rating[]      @relation("RatingsReceived")
   verificationRequests VerificationRequest[]
 
+  walletBalance        Float                 @default(0) @map("wallet_balance")
+  walletTransactions   WalletTransaction[]
+  payoutRequests       PayoutRequest[]
+  razorpayContactId    String?               @map("razorpay_contact_id")
+  phoneNumber          String?               @map("phone_number")
+
+  sentNotifications    Notification[]        @relation("SentNotifications")
+  notificationReads    NotificationRead[]
+
   @@map("users")
 }
 
@@ -115,17 +124,21 @@ model ActivityLog {
 }
 
 model EscrowDeal {
-  id              Int                  @id @default(autoincrement())
-  chatId          String               @map("chat_id")
-  clientId        Int                  @map("client_id")
-  vendorId        Int                  @map("vendor_id")
-  title           String
-  description     String?
-  totalAmount     Float                @map("total_amount")
-  releasedPercent Float                @default(0) @map("released_percent")
-  status          String               @default("active")
-  createdAt       DateTime             @default(now()) @map("created_at")
-  updatedAt       DateTime             @updatedAt @map("updated_at")
+  id                Int                  @id @default(autoincrement())
+  chatId            String               @map("chat_id")
+  clientId          Int                  @map("client_id")
+  vendorId          Int                  @map("vendor_id")
+  title             String
+  description       String?
+  totalAmount       Float                @map("total_amount")
+  releasedPercent   Float                @default(0) @map("released_percent")
+  status            String               @default("pending_payment") // pending_payment, active, completed, cancelled
+  razorpayOrderId   String?              @map("razorpay_order_id")
+  razorpayPaymentId String?              @map("razorpay_payment_id")
+  paymentStatus     String               @default("pending") @map("payment_status") // pending, paid, failed
+  paidAmount        Float                @default(0) @map("paid_amount")
+  createdAt         DateTime             @default(now()) @map("created_at")
+  updatedAt         DateTime             @updatedAt @map("updated_at")
 
   client       User                 @relation("ClientDeals", fields: [clientId], references: [id])
   vendor       User                 @relation("VendorDeals", fields: [vendorId], references: [id])
@@ -148,17 +161,116 @@ model EscrowTransaction {
 }
 
 model VerificationRequest {
-  id            Int       @id @default(autoincrement())
-  userId        Int       @map("user_id")
-  status        String    @default("pending") // pending, approved, rejected
-  paymentAmount Float     @map("payment_amount")
-  paymentProof  String?   @map("payment_proof") // Optional URL to payment screenshot
-  adminNote     String?   @map("admin_note") // Admin's reason for approval/rejection
-  createdAt     DateTime  @default(now()) @map("created_at")
-  reviewedAt    DateTime? @map("reviewed_at")
+  id                Int       @id @default(autoincrement())
+  userId            Int       @map("user_id")
+  status            String    @default("pending_payment") // pending_payment, pending, approved, rejected
+  paymentAmount     Float     @map("payment_amount")
+  paymentProof      String?   @map("payment_proof") // Optional URL to payment screenshot
+  razorpayOrderId   String?   @map("razorpay_order_id")
+  razorpayPaymentId String?   @map("razorpay_payment_id")
+  paymentStatus     String    @default("pending") @map("payment_status") // pending, paid, failed
+  adminNote         String?   @map("admin_note") // Admin's reason for approval/rejection
+  createdAt         DateTime  @default(now()) @map("created_at")
+  reviewedAt        DateTime? @map("reviewed_at")
 
   user User @relation(fields: [userId], references: [id])
 
   @@map("verification_requests")
 }
 
+model PaymentLog {
+  id                Int      @id @default(autoincrement())
+  type              String   // escrow, verification
+  entityId          Int      @map("entity_id") // ID of EscrowDeal or VerificationRequest
+  razorpayOrderId   String?  @map("razorpay_order_id")
+  razorpayPaymentId String?  @map("razorpay_payment_id")
+  amount            Float
+  currency          String   @default("INR")
+  status            String   // created, paid, failed, refunded
+  eventType         String?  @map("event_type") // webhook event type
+  metadata          Json?    // Additional payment/webhook data
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  @@map("payment_logs")
+}
+
+model WalletTransaction {
+  id          Int      @id @default(autoincrement())
+  userId      Int      @map("user_id")
+  type        String   // credit, debit, escrow_release, payout
+  amount      Float
+  balance     Float    // Balance after transaction
+  reference   String?  // Deal ID, Payout ID, etc.
+  description String
+  createdAt   DateTime @default(now()) @map("created_at")
+  
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("wallet_transactions")
+}
+
+model PayoutRequest {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  amount    Float
+  status    String   @default("pending") // pending, processing, completed, failed, cancelled
+  
+  // Payment method and details
+  paymentMethod String  @default("bank") @map("payment_method") // bank or upi
+  bankAccount   String? @map("bank_account")
+  ifscCode      String? @map("ifsc_code")
+  accountName   String  @map("account_name")
+  upiVpa        String? @map("upi_vpa") // UPI ID like user@paytm
+  
+  // Razorpay integration
+  razorpayPayoutId      String? @map("razorpay_payout_id")
+  razorpayFundAccountId String? @map("razorpay_fund_account_id")
+  razorpayContactId     String? @map("razorpay_contact_id")
+  
+  adminNote     String?  @map("admin_note")
+  requestedAt   DateTime @default(now()) @map("requested_at")
+  processedAt   DateTime? @map("processed_at")
+  
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("payout_requests")
+}
+
+model Notification {
+  id        Int      @id @default(autoincrement())
+  title     String
+  message   String
+  type      String   @default("info") // info, warning, success, alert
+  sentBy    Int      @map("sent_by")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  admin User               @relation("SentNotifications", fields: [sentBy], references: [id])
+  reads NotificationRead[]
+
+  @@map("notifications")
+}
+
+model NotificationRead {
+  id             Int      @id @default(autoincrement())
+  notificationId Int      @map("notification_id")
+  userId         Int      @map("user_id")
+  readAt         DateTime @default(now()) @map("read_at")
+
+  notification Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id])
+
+  @@unique([notificationId, userId])
+  @@map("notification_reads")
+}
+
+model OtpCode {
+  id        Int      @id @default(autoincrement())
+  email     String
+  code      String
+  type      String   // "registration" | "password_reset"
+  expiresAt DateTime @map("expires_at")
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("otp_codes")
+}

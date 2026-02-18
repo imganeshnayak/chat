@@ -12,18 +12,20 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
-import { getEscrowDeals, createEscrowDeal, releaseEscrowPayment, EscrowDeal } from "@/lib/api";
+import { getEscrowDeals, createEscrowDeal, releaseEscrowPayment, EscrowDeal, initiateEscrowPayment, verifyPayment, deleteEscrowDeal } from "@/lib/api";
 import { socketService } from "@/lib/socket";
 import LoadingScreen from "@/components/ui/LoadingScreen";
+import { useRazorpay } from "@/hooks/useRazorpay";
 
 function formatCurrency(n: number) {
-  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n);
+  return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" }).format(n);
 }
 
 const EscrowPage = () => {
   const { toast } = useToast();
   const { user, isLoading: authLoading } = useAuth();
   const navigate = useNavigate();
+  const { openCheckout } = useRazorpay();
   const [deals, setDeals] = useState<EscrowDeal[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [releasePercent, setReleasePercent] = useState("");
@@ -94,11 +96,82 @@ const EscrowPage = () => {
     }
   };
 
+  const handlePayForDeal = async (deal: EscrowDeal) => {
+    if (deal.paymentStatus === 'paid') {
+      toast({
+        title: "Already Paid",
+        description: "Payment has already been completed for this deal.",
+      });
+      return;
+    }
+
+    setIsCreating(true);
+    try {
+      // Initiate payment
+      const paymentOrder = await initiateEscrowPayment(deal.id);
+
+      // Open Razorpay checkout
+      openCheckout({
+        orderId: paymentOrder.orderId,
+        amount: paymentOrder.amount,
+        currency: paymentOrder.currency,
+        name: "Escrow Payment",
+        description: paymentOrder.title || deal.title,
+        onSuccess: async (response) => {
+          // Verify payment with backend
+          try {
+            await verifyPayment({
+              orderId: response.razorpay_order_id,
+              paymentId: response.razorpay_payment_id,
+              signature: response.razorpay_signature,
+              type: "escrow",
+              entityId: deal.id,
+            });
+
+            toast({
+              title: "Payment Successful!",
+              description: "Your escrow deal is now active.",
+            });
+
+            loadDeals();
+          } catch (err) {
+            toast({
+              title: "Verification Failed",
+              description: err instanceof Error ? err.message : "Failed to verify payment",
+              variant: "destructive",
+            });
+          }
+        },
+        onFailure: (error) => {
+          toast({
+            title: "Payment Failed",
+            description: error.message || "Payment could not be processed",
+            variant: "destructive",
+          });
+        },
+        userDetails: {
+          name: user?.displayName,
+          email: user?.email,
+        },
+      });
+    } catch (err) {
+      toast({
+        title: "Error",
+        description: err instanceof Error ? err.message : "Failed to initiate payment",
+        variant: "destructive",
+      });
+    } finally {
+      setIsCreating(false);
+    }
+  };
+
   const handleCreateDeal = async () => {
     if (!newDeal.chatId || !newDeal.vendorId || !newDeal.title || !newDeal.totalAmount) {
       toast({
         title: "Missing fields",
-        description: "Please fill in all required fields",
+        description: !newDeal.chatId || !newDeal.vendorId
+          ? "Please create escrow deals from within a chat conversation."
+          : "Please fill in all required fields",
         variant: "destructive"
       });
       return;
@@ -106,7 +179,12 @@ const EscrowPage = () => {
 
     setIsCreating(true);
     try {
-      await createEscrowDeal({
+      toast({
+        title: "Deal created!",
+        description: "Proceeding to payment..."
+      });
+
+      const createdDeal = await createEscrowDeal({
         chatId: newDeal.chatId,
         vendorId: parseInt(newDeal.vendorId),
         title: newDeal.title,
@@ -114,14 +192,85 @@ const EscrowPage = () => {
         totalAmount: parseFloat(newDeal.totalAmount)
       });
 
-      toast({
-        title: "Deal created!",
-        description: "Escrow deal has been created successfully"
-      });
-
       setIsNewDealOpen(false);
       setNewDeal({ chatId: "", vendorId: "", title: "", description: "", totalAmount: "" });
       loadDeals();
+
+      // Automatically trigger payment
+      setTimeout(async () => {
+        try {
+          // Initiate payment
+          const paymentOrder = await initiateEscrowPayment(createdDeal.id);
+
+          // Open Razorpay checkout
+          openCheckout({
+            orderId: paymentOrder.orderId,
+            amount: paymentOrder.amount,
+            currency: paymentOrder.currency,
+            name: "Escrow Payment",
+            description: paymentOrder.title || createdDeal.title,
+            onSuccess: async (response) => {
+              // Verify payment with backend
+              try {
+                await verifyPayment({
+                  orderId: response.razorpay_order_id,
+                  paymentId: response.razorpay_payment_id,
+                  signature: response.razorpay_signature,
+                  type: "escrow",
+                  entityId: createdDeal.id,
+                });
+
+                toast({
+                  title: "Payment Successful!",
+                  description: "Your escrow deal is now active.",
+                });
+
+                loadDeals();
+              } catch (err) {
+                toast({
+                  title: "Verification Failed",
+                  description: err instanceof Error ? err.message : "Failed to verify payment",
+                  variant: "destructive",
+                });
+                // Delete the deal if payment verification fails
+                await deleteEscrowDeal(createdDeal.id);
+                loadDeals();
+              }
+            },
+            onFailure: async (error) => {
+              toast({
+                title: "Payment Cancelled",
+                description: "The deal has been removed since payment was not completed.",
+                variant: "destructive",
+              });
+              // Delete the deal when payment is cancelled
+              try {
+                await deleteEscrowDeal(createdDeal.id);
+                loadDeals();
+              } catch (err) {
+                console.error("Failed to delete deal:", err);
+              }
+            },
+            userDetails: {
+              name: user?.displayName,
+              email: user?.email,
+            },
+          });
+        } catch (err) {
+          toast({
+            title: "Error",
+            description: err instanceof Error ? err.message : "Failed to initiate payment",
+            variant: "destructive",
+          });
+          // Delete the deal if payment initiation fails
+          try {
+            await deleteEscrowDeal(createdDeal.id);
+            loadDeals();
+          } catch (deleteErr) {
+            console.error("Failed to delete deal:", deleteErr);
+          }
+        }
+      }, 500);
     } catch (err) {
       toast({
         title: "Error",
@@ -202,7 +351,11 @@ const EscrowPage = () => {
                     placeholder="chat_123_456_..."
                     value={newDeal.chatId}
                     onChange={(e) => setNewDeal({ ...newDeal, chatId: e.target.value })}
+                    readOnly
+                    disabled
+                    title="Chat ID is automatically set from the conversation"
                   />
+                  <p className="text-xs text-muted-foreground mt-1">Auto-populated from chat</p>
                 </div>
                 <div>
                   <Label className="text-card-foreground">Vendor ID</Label>
@@ -212,7 +365,11 @@ const EscrowPage = () => {
                     placeholder="User ID of vendor"
                     value={newDeal.vendorId}
                     onChange={(e) => setNewDeal({ ...newDeal, vendorId: e.target.value })}
+                    readOnly
+                    disabled
+                    title="Vendor ID is automatically set from the conversation"
                   />
+                  <p className="text-xs text-muted-foreground mt-1">Auto-populated from chat</p>
                 </div>
                 <div>
                   <Label className="text-card-foreground">Title</Label>
@@ -233,7 +390,7 @@ const EscrowPage = () => {
                   />
                 </div>
                 <div>
-                  <Label className="text-card-foreground">Total Amount ($)</Label>
+                  <Label className="text-card-foreground">Total Amount (₹)</Label>
                   <Input
                     className="mt-1.5 bg-secondary border-border"
                     type="number"
@@ -276,8 +433,8 @@ const EscrowPage = () => {
                             {isClient ? "Vendor" : "Client"}: {otherParty.displayName}
                           </p>
                         </div>
-                        <Badge className={deal.status === "active" ? "bg-accent text-accent-foreground" : deal.status === "completed" ? "bg-green-500 text-white" : "bg-muted text-muted-foreground"}>
-                          {deal.status}
+                        <Badge className={deal.status === "active" ? "bg-accent text-accent-foreground" : deal.status === "completed" ? "bg-green-500 text-white" : deal.status === "pending_payment" ? "bg-yellow-500 text-white" : "bg-muted text-muted-foreground"}>
+                          {deal.status === "pending_payment" ? "Awaiting Payment" : deal.status}
                         </Badge>
                       </div>
                     </CardHeader>
@@ -335,7 +492,7 @@ const EscrowPage = () => {
                         <Dialog open={selectedDeal === deal.id} onOpenChange={(open) => !open && setSelectedDeal(null)}>
                           <DialogTrigger asChild>
                             <Button className="w-full" onClick={() => setSelectedDeal(deal.id)}>
-                              <DollarSign className="mr-1 h-4 w-4" /> Release Payment
+                              Release Payment
                             </Button>
                           </DialogTrigger>
                           <DialogContent className="bg-card border-border">
@@ -370,6 +527,13 @@ const EscrowPage = () => {
                             </div>
                           </DialogContent>
                         </Dialog>
+                      )}
+
+                      {/* Payment button - for pending_payment deals */}
+                      {isClient && deal.status === "pending_payment" && deal.paymentStatus !== "paid" && (
+                        <Button className="w-full bg-primary" onClick={() => handlePayForDeal(deal)} disabled={isCreating}>
+                          {isCreating ? "Processing..." : "Complete Payment"}
+                        </Button>
                       )}
                     </CardContent>
                   </Card>

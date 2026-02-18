@@ -64,7 +64,10 @@ const Login = () => {
               />
             </div>
             <div>
-              <Label className="text-card-foreground">Password</Label>
+              <div className="flex items-center justify-between">
+                <Label className="text-card-foreground">Password</Label>
+                <Link to="/forgot-password" className="text-xs text-primary hover:underline">Forgot password?</Link>
+              </div>
               <Input
                 className="mt-1.5 bg-secondary border-border"
                 type="password"
