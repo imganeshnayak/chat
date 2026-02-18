@@ -5,6 +5,7 @@ import crypto from 'crypto';
 import { PrismaClient } from '@prisma/client';
 import { auth } from '../middleware/auth.js';
 import { generateOtp, sendRegistrationOtp, sendPasswordResetOtp } from '../services/emailService.js';
+import { validatePassword } from '../utils/passwordValidator.js';
 
 const prisma = new PrismaClient();
 const router = express.Router();
@@ -93,6 +94,12 @@ router.post('/register', async (req, res) => {
         });
         if (existing) {
             return res.status(400).json({ error: 'User already exists.' });
+        }
+
+        // Validate password strength
+        const passwordValidation = validatePassword(password);
+        if (!passwordValidation.isValid) {
+            return res.status(400).json({ error: passwordValidation.message });
         }
 
         const hashedPassword = await bcrypt.hash(password, 10);
@@ -273,8 +280,10 @@ router.post('/reset-password', async (req, res) => {
             return res.status(400).json({ error: 'Reset token and new password are required.' });
         }
 
-        if (newPassword.length < 6) {
-            return res.status(400).json({ error: 'Password must be at least 6 characters.' });
+        // Validate password strength
+        const passwordValidation = validatePassword(newPassword);
+        if (!passwordValidation.isValid) {
+            return res.status(400).json({ error: passwordValidation.message });
         }
 
         // Verify reset token

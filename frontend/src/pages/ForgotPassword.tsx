@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { apiFetch } from "@/lib/api";
+import { validatePassword } from "@/lib/passwordValidation";
+import PasswordStrength from "@/components/auth/PasswordStrength";
 
 type Step = "email" | "otp" | "newPassword" | "done";
 
@@ -65,8 +67,9 @@ const ForgotPassword = () => {
             setError("Passwords don't match.");
             return;
         }
-        if (newPassword.length < 6) {
-            setError("Password must be at least 6 characters.");
+        const passwordCheck = validatePassword(newPassword);
+        if (!passwordCheck.isValid) {
+            setError(passwordCheck.message || "Please use a stronger password");
             return;
         }
         setIsLoading(true);
@@ -166,11 +169,12 @@ const ForgotPassword = () => {
                                 <div>
                                     <Label className="text-card-foreground">New Password</Label>
                                     <div className="relative mt-1.5">
-                                        <Input className="bg-secondary border-border pr-10" type={showPassword ? "text" : "password"} placeholder="••••••••" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required minLength={6} />
+                                        <Input className="bg-secondary border-border pr-10" type={showPassword ? "text" : "password"} placeholder="••••••••" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required />
                                         <button type="button" onClick={() => setShowPassword(s => !s)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">
                                             {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                                         </button>
                                     </div>
+                                    <PasswordStrength password={newPassword} />
                                 </div>
                                 <div>
                                     <Label className="text-card-foreground">Confirm Password</Label>

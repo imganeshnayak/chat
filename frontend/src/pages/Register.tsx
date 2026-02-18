@@ -7,6 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiFetch } from "@/lib/api";
+import { validatePassword } from "@/lib/passwordValidation";
+import PasswordStrength from "@/components/auth/PasswordStrength";
 
 type Step = "form" | "otp";
 
@@ -27,6 +29,14 @@ const Register = () => {
   const handleSendOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+
+    // Validate password strength
+    const passwordCheck = validatePassword(password);
+    if (!passwordCheck.isValid) {
+      setError(passwordCheck.message || "Please use a stronger password");
+      return;
+    }
+
     setIsSendingOtp(true);
     try {
       await apiFetch("/api/auth/send-otp", {
@@ -113,7 +123,15 @@ const Register = () => {
                 </div>
                 <div>
                   <Label className="text-card-foreground">Password</Label>
-                  <Input className="mt-1.5 bg-secondary border-border" type="password" placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={6} />
+                  <Input
+                    className="mt-1.5 bg-secondary border-border"
+                    type="password"
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                  />
+                  <PasswordStrength password={password} />
                 </div>
                 <Button type="submit" className="w-full" disabled={isSendingOtp}>
                   {isSendingOtp ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Sending OTP...</> : "Continue →"}
