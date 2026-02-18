@@ -4,29 +4,38 @@ import axios from 'axios';
 
 const prisma = new PrismaClient();
 
-// Initialize Razorpay for Payouts
-const razorpay = new Razorpay({
-    key_id: process.env.RAZORPAY_KEY_ID,
-    key_secret: process.env.RAZORPAY_KEY_SECRET
-});
+// Initialize Razorpay for Payouts (only if keys are configured)
+let razorpay = null;
+let razorpayAPI = null;
 
-// Create axios instance for RazorpayX API (Payouts)
-const razorpayAPI = axios.create({
-    baseURL: 'https://api.razorpay.com/v1',
-    auth: {
-        username: process.env.RAZORPAY_KEY_ID,
-        password: process.env.RAZORPAY_KEY_SECRET
-    },
-    headers: {
-        'Content-Type': 'application/json',
-        'X-Payout-Idempotency': '' // Will be set per request if needed
-    }
-});
+if (process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET) {
+    razorpay = new Razorpay({
+        key_id: process.env.RAZORPAY_KEY_ID,
+        key_secret: process.env.RAZORPAY_KEY_SECRET
+    });
+
+    // Create axios instance for RazorpayX API (Payouts)
+    razorpayAPI = axios.create({
+        baseURL: 'https://api.razorpay.com/v1',
+        auth: {
+            username: process.env.RAZORPAY_KEY_ID,
+            password: process.env.RAZORPAY_KEY_SECRET
+        },
+        headers: {
+            'Content-Type': 'application/json',
+            'X-Payout-Idempotency': '' // Will be set per request if needed
+        }
+    });
+    console.log('✅ Razorpay Payouts service initialized');
+} else {
+    console.warn('⚠️ Razorpay keys not configured — payout features will be disabled');
+}
 
 /**
  * Create or get Razorpay contact for a user
  */
 export async function getOrCreateContact(user) {
+    if (!razorpayAPI) throw new Error('Razorpay is not configured. Please add RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET to environment.');
     try {
         // Check if user already has a contact ID
         if (user.razorpayContactId) {
