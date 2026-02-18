@@ -11,8 +11,12 @@ const TelegramLogin = () => {
         // Define the callback function in the window object
         (window as any).onTelegramAuth = async (user: any) => {
             try {
-                await loginWithTelegram(user);
-                navigate('/chat');
+                const loggedInUser = await loginWithTelegram(user);
+                if (loggedInUser.role === 'admin') {
+                    navigate('/admin');
+                } else {
+                    navigate('/chat');
+                }
             } catch (err) {
                 console.error('Telegram login failed:', err);
             }

@@ -18,8 +18,12 @@ const Login = () => {
     e.preventDefault();
     setError("");
     try {
-      await login(email, password);
-      navigate("/chat");
+      const loggedInUser = await login(email, password);
+      if (loggedInUser.role === 'admin') {
+        navigate("/admin");
+      } else {
+        navigate("/chat");
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login failed");
     }

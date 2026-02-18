@@ -909,6 +909,13 @@ const ChatPage = () => {
     navigate("/login");
   }, [logout, navigate]);
 
+  // Redirect admin to admin dashboard
+  useEffect(() => {
+    if (!authLoading && user?.role === 'admin') {
+      navigate('/admin', { replace: true });
+    }
+  }, [user, authLoading, navigate]);
+
   const [chats, setChats] = useState<ChatType[]>([]);
   const [messages, setMessages] = useState<MessageType[]>([]);
   const [selectedChat, setSelectedChat] = useState<ChatType | null>(null);

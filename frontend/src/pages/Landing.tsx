@@ -1,6 +1,8 @@
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { MessageSquare, Shield, Share2, DollarSign, ArrowRight, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useAuth } from "@/contexts/AuthContext";
+import { useEffect } from "react";
 
 const features = [
   {
@@ -26,6 +28,21 @@ const features = [
 ];
 
 const Landing = () => {
+  const { user, isLoading } = useAuth();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!isLoading && user) {
+      if (user.role === 'admin') {
+        navigate('/admin');
+      } else {
+        navigate('/chat');
+      }
+    }
+  }, [user, isLoading, navigate]);
+
+  if (isLoading || user) return null; // Prevent flash of landing content
+
   return (
     <div className="min-h-screen bg-background">
       {/* Nav */}

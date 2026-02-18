@@ -5,9 +5,9 @@ interface AuthContextType {
   user: AuthUser | null;
   token: string | null;
   isLoading: boolean;
-  login: (email: string, password: string) => Promise<void>;
-  loginWithTelegram: (data: any) => Promise<void>;
-  register: (username: string, email: string, password: string, displayName: string | undefined, otp: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<AuthUser>;
+  loginWithTelegram: (data: any) => Promise<AuthUser>;
+  register: (username: string, email: string, password: string, displayName: string | undefined, otp: string) => Promise<AuthUser>;
   logout: () => void;
   refreshUser: () => Promise<void>;
 }
@@ -48,6 +48,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setToken(response.token);
       setUser(response.user);
       localStorage.setItem('authToken', response.token);
+      return response.user;
     } finally {
       setIsLoading(false);
     }
@@ -60,6 +61,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setToken(response.token);
       setUser(response.user);
       localStorage.setItem('authToken', response.token);
+      return response.user;
     } finally {
       setIsLoading(false);
     }
@@ -72,6 +74,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setToken(response.token);
       setUser(response.user);
       localStorage.setItem('authToken', response.token);
+      return response.user;
     } finally {
       setIsLoading(false);
     }
