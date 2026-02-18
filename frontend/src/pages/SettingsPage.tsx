@@ -105,6 +105,7 @@ const SettingsPage = () => {
                     name: user?.displayName,
                     email: user?.email,
                 },
+                keyId: paymentOrder.key_id,
             });
         } catch (err) {
             toast({

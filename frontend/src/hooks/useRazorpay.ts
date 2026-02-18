@@ -45,6 +45,7 @@ export function useRazorpay() {
         onSuccess,
         onFailure,
         userDetails,
+        keyId,
     }: {
         orderId: string;
         amount: number;
@@ -58,6 +59,7 @@ export function useRazorpay() {
             email?: string;
             contact?: string;
         };
+        keyId?: string;
     }) => {
         if (!window.Razorpay) {
             toast({
@@ -69,7 +71,7 @@ export function useRazorpay() {
         }
 
         const options: RazorpayOptions = {
-            key: import.meta.env.VITE_RAZORPAY_KEY_ID || "",
+            key: keyId || import.meta.env.VITE_RAZORPAY_KEY_ID || "",
             amount,
             currency,
             name,
