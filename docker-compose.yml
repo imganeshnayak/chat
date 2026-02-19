@@ -1,5 +1,9 @@
 version: '3.8'
 
+networks:
+  vesper_network:
+    driver: bridge
+
 services:
   database:
     image: postgres:15-alpine
@@ -13,6 +17,8 @@ services:
       - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    networks:
+      - vesper_network
 
   backend:
     build: ./backend
@@ -35,6 +41,8 @@ services:
       - database
     ports:
       - "5000:5000"
+    networks:
+      - vesper_network
 
   frontend:
     build:
@@ -50,6 +58,8 @@ services:
       - /etc/letsencrypt:/etc/letsencrypt:ro
     depends_on:
       - backend
+    networks:
+      - vesper_network
 
   pgadmin:
     image: dpage/pgadmin4
@@ -62,6 +72,8 @@ services:
       - "5055:80"
     depends_on:
       - database
+    networks:
+      - vesper_network
 
 volumes:
   postgres_data:
