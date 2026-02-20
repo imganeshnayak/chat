@@ -560,10 +560,10 @@ const AdminDashboard = () => {
                         <Button
                           variant="ghost"
                           size="icon"
-                          title="View chat"
-                          onClick={() => navigate(`/admin/chats/${chat.chatId}`)}
+                          title="Open in Chat"
+                          onClick={() => navigate(`/chat?chatId=${chat.chatId}`)}
                         >
-                          <Eye className="h-4 w-4" />
+                          <MessageSquare className="h-4 w-4" />
                         </Button>
                       </div>
                     </CardContent>

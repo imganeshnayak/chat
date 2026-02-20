@@ -24,17 +24,43 @@ const upload = multer({
 // GET /api/messages/chats/list - Get chat list for current user (must be before /:chatId)
 router.get('/chats/list', auth, async (req, res) => {
     try {
+        // For admins, include all support chats so they can assist any user
+        const whereClause = req.user.role === 'admin'
+            ? {
+                OR: [
+                    { senderId: req.user.id },
+                    { receiverId: req.user.id },
+                    { chatId: { startsWith: 'support_' } }
+                ]
+            }
+            : {
+                OR: [
+                    { senderId: req.user.id },
+                    { receiverId: req.user.id }
+                ]
+            };
+
         const messages = await prisma.message.findMany({
-            where: { OR: [{ senderId: req.user.id }, { receiverId: req.user.id }] },
+            where: whereClause,
             orderBy: { createdAt: 'desc' },
-            include: { sender: { select: { id: true, displayName: true, avatarUrl: true, username: true, verified: true } }, receiver: { select: { id: true, displayName: true, avatarUrl: true, username: true, verified: true } } },
+            include: {
+                sender: { select: { id: true, displayName: true, avatarUrl: true, username: true, verified: true } },
+                receiver: { select: { id: true, displayName: true, avatarUrl: true, username: true, verified: true } }
+            },
         });
 
         // Group by chatId and get latest message per chat
         const chatMap = new Map();
         for (const msg of messages) {
             if (!chatMap.has(msg.chatId)) {
-                const otherUser = msg.senderId === req.user.id ? msg.receiver : msg.sender;
+                let otherUser;
+                if (msg.chatId.startsWith('support_') && req.user.role === 'admin') {
+                    // For admins in support chats, the "other user" is the user being assisted
+                    const userIdFromChat = parseInt(msg.chatId.split('_')[1]);
+                    otherUser = msg.senderId === userIdFromChat ? msg.sender : msg.receiver;
+                } else {
+                    otherUser = msg.senderId === req.user.id ? msg.receiver : msg.sender;
+                }
                 const unreadCount = await prisma.message.count({
                     where: { chatId: msg.chatId, read: false, receiverId: req.user.id },
                 });
@@ -75,12 +101,14 @@ router.get('/chats/list', auth, async (req, res) => {
                 });
             }
         } else {
-            // Update existing support chat entry with branding
+            // Update the admin's own support chat entry with branding if it exists
             const supportEntry = chatMap.get(supportChatId);
-            supportEntry.display_name = "Admin";
-            supportEntry.avatar_url = null; // Ensure generic avatar
-            supportEntry.username = "admin";
-            supportEntry.isOfficial = true;
+            if (supportEntry) {
+                supportEntry.display_name = "Admin";
+                supportEntry.avatar_url = null; // Ensure generic avatar
+                supportEntry.username = "admin";
+                supportEntry.isOfficial = true;
+            }
         }
 
         res.json(Array.from(chatMap.values()));

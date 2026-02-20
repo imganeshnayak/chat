@@ -230,6 +230,11 @@ const ConversationList = ({
                       <ShieldCheck className="h-3 w-3" />
                       OFFICIAL
                     </Badge>
+                  ) : chat.chat_id.startsWith('support_') ? (
+                    <Badge variant="secondary" className="bg-indigo-100/80 text-indigo-700 text-[10px] h-4 px-1.5 border-none flex items-center gap-0.5 dark:bg-indigo-900/30 dark:text-indigo-400">
+                      <HelpCircle className="h-3 w-3" />
+                      SUPPORT
+                    </Badge>
                   ) : chat.verified && (
                     <img src="/verified-badge.svg" alt="Verified" className="h-5 w-5 flex-shrink-0" />
                   )}
@@ -909,12 +914,8 @@ const ChatPage = () => {
     navigate("/login");
   }, [logout, navigate]);
 
-  // Redirect admin to admin dashboard
-  useEffect(() => {
-    if (!authLoading && user?.role === 'admin') {
-      navigate('/admin', { replace: true });
-    }
-  }, [user, authLoading, navigate]);
+  // No longer redirecting admin to dashboard, allowing them to use ChatPage for support
+
 
   const [chats, setChats] = useState<ChatType[]>([]);
   const [messages, setMessages] = useState<MessageType[]>([]);
@@ -995,29 +996,41 @@ const ChatPage = () => {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const targetUserId = params.get('userId');
+    const targetChatId = params.get('chatId');
 
-    if (targetUserId && user && chats.length > 0) {
-      const targetIdNum = parseInt(targetUserId);
-      if (targetIdNum === user.id) return; // Can't chat with self
+    if (chats.length > 0 && user) {
+      if (targetChatId) {
+        const chat = chats.find(c => c.chat_id === targetChatId);
+        if (chat) {
+          setSelectedChat(chat);
+          window.history.replaceState({}, '', '/chat');
+          return;
+        }
+      }
 
-      // 1. Check if chat already exists
-      const existingChat = chats.find(c => c.user_id === targetIdNum);
-      if (existingChat) {
-        setSelectedChat(existingChat);
-        // Clear param to avoid re-triggering if user navigates back to list
-        window.history.replaceState({}, '', '/chat');
-      } else {
-        // 2. If not, fetch user and start new chat
-        const fetchAndStartChat = async () => {
-          try {
-            const targetUser = await getUser(targetIdNum);
-            startChat(targetUser);
-            window.history.replaceState({}, '', '/chat');
-          } catch (err) {
-            console.error("Failed to start chat from query param:", err);
-          }
-        };
-        fetchAndStartChat();
+      if (targetUserId) {
+        const targetIdNum = parseInt(targetUserId);
+        if (targetIdNum === user.id) return; // Can't chat with self
+
+        // 1. Check if chat already exists
+        const existingChat = chats.find(c => c.user_id === targetIdNum);
+        if (existingChat) {
+          setSelectedChat(existingChat);
+          // Clear param to avoid re-triggering if user navigates back to list
+          window.history.replaceState({}, '', '/chat');
+        } else {
+          // 2. If not, fetch user and start new chat
+          const fetchAndStartChat = async () => {
+            try {
+              const targetUser = await getUser(targetIdNum);
+              startChat(targetUser);
+              window.history.replaceState({}, '', '/chat');
+            } catch (err) {
+              console.error("Failed to start chat from query param:", err);
+            }
+          };
+          fetchAndStartChat();
+        }
       }
     }
   }, [user, chats, startChat]);
