@@ -782,6 +782,9 @@ const ChatView = ({
             onChange={(e) => setNewMessage(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleSend()}
             data-nopaste
+            type="text"
+            inputMode="text"
+            autoComplete="off"
           />
           <Button size="icon" onClick={handleSend} className="shrink-0">
             <Send className="h-4 w-4" />
