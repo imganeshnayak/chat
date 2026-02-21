@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Send } from "lucide-react";
 import TelegramLogin from "@/components/TelegramLogin";
@@ -9,7 +9,7 @@ import { useAuth } from "@/contexts/AuthContext";
 
 const Login = () => {
   const navigate = useNavigate();
-  const { login, isLoading } = useAuth();
+  const { login, isLoading, user } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -20,9 +20,9 @@ const Login = () => {
     try {
       const loggedInUser = await login(email, password);
       if (loggedInUser.role === 'admin') {
-        navigate("/admin");
+        navigate("/admin", { replace: true });
       } else {
-        navigate("/chat");
+        navigate("/chat", { replace: true });
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login failed");

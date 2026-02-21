@@ -20,6 +20,8 @@ router.get('/stats', auth, adminOnly, async (req, res) => {
             totalEscrowValue,
             recentActivity,
             pendingPayouts,
+            pendingVerifications,
+            pendingReports,
             totalPayoutValue
         ] = await Promise.all([
             prisma.user.count(),
@@ -38,6 +40,8 @@ router.get('/stats', auth, adminOnly, async (req, res) => {
                 where: { createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) } }
             }),
             prisma.payoutRequest.count({ where: { status: 'pending' } }),
+            prisma.verificationRequest.count({ where: { status: 'pending' } }),
+            prisma.report.count({ where: { status: 'pending' } }),
             prisma.payoutRequest.aggregate({
                 where: { status: 'completed' },
                 _sum: { amount: true }
@@ -54,6 +58,8 @@ router.get('/stats', auth, adminOnly, async (req, res) => {
             totalEscrowValue: totalEscrowValue._sum.totalAmount || 0,
             recentActivity,
             pendingPayouts,
+            pendingVerifications,
+            pendingReports,
             totalPayoutValue: totalPayoutValue._sum.amount || 0
         });
     } catch (err) {
@@ -176,7 +182,7 @@ router.get('/chats', auth, adminOnly, async (req, res) => {
             by: ['chatId'],
             where: {
                 chatId: {
-                    startsWith: 'support_'
+                    startsWith: 'chat_'
                 }
             },
             _count: { id: true },
@@ -216,7 +222,7 @@ router.get('/chats', auth, adminOnly, async (req, res) => {
             by: ['chatId'],
             where: {
                 chatId: {
-                    startsWith: 'support_'
+                    startsWith: 'chat_'
                 }
             },
             _count: true

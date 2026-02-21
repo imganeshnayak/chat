@@ -1,9 +1,16 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { Bell, X, CheckCheck, Info, AlertTriangle, CheckCircle, AlertCircle, Trash2 } from "lucide-react";
 import { getNotifications, markNotificationRead, markAllNotificationsRead, deleteNotification, Notification } from "@/lib/api";
 import { toast } from "sonner";
 import { io as socketIO } from "socket.io-client";
 import { useAuth } from "@/contexts/AuthContext";
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogTrigger,
+} from "@/components/ui/dialog";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
@@ -28,7 +35,6 @@ export default function NotificationBell() {
     const { user, token } = useAuth();
     const [open, setOpen] = useState(false);
     const [notifications, setNotifications] = useState<Notification[]>([]);
-    const panelRef = useRef<HTMLDivElement>(null);
 
     const unreadCount = notifications.filter(n => !n.isRead).length;
 
@@ -36,8 +42,12 @@ export default function NotificationBell() {
     useEffect(() => {
         if (!token) return;
         getNotifications()
-            .then(setNotifications)
-            .catch(() => { });
+            .then(data => {
+                // Filter out notifications sent by the current user (e.g. self-broadcasts)
+                const filtered = data.filter(n => n.sentById !== user?.id);
+                setNotifications(filtered);
+            })
+            .catch((err) => console.error("Failed to load notifications:", err));
     }, [token]);
 
     // Socket.IO: listen for real-time broadcasts
@@ -72,29 +82,22 @@ export default function NotificationBell() {
         return () => { socket.disconnect(); };
     }, [token, user]);
 
-    // Close panel on outside click
-    useEffect(() => {
-        const handler = (e: MouseEvent) => {
-            if (panelRef.current && !panelRef.current.contains(e.target as Node)) {
-                setOpen(false);
-            }
-        };
-        if (open) document.addEventListener("mousedown", handler);
-        return () => document.removeEventListener("mousedown", handler);
-    }, [open]);
-
     const handleMarkRead = async (id: number) => {
         try {
             await markNotificationRead(id);
             setNotifications(prev => prev.map(n => n.id === id ? { ...n, isRead: true } : n));
-        } catch { }
+        } catch (err) {
+            console.error("Failed to mark notification as read:", err);
+        }
     };
 
     const handleMarkAllRead = async () => {
         try {
             await markAllNotificationsRead();
             setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
-        } catch { }
+        } catch (err) {
+            console.error("Failed to mark all notifications as read:", err);
+        }
     };
 
     const handleDelete = async (id: number) => {
@@ -113,97 +116,101 @@ export default function NotificationBell() {
                     description: "System notifications cannot be deleted."
                 });
             }
-        } catch (err) { }
+        } catch (err) {
+            console.error("Notification delete error:", err);
+        }
     };
 
     return (
-        <div className="relative" ref={panelRef}>
-            {/* Bell Button */}
-            <button
-                onClick={() => setOpen(o => !o)}
-                className="relative p-2 rounded-full hover:bg-white/10 transition-colors"
-                aria-label="Notifications"
-            >
-                <Bell className="w-5 h-5 text-white/80" />
-                {unreadCount > 0 && (
-                    <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1 animate-pulse">
-                        {unreadCount > 99 ? "99+" : unreadCount}
-                    </span>
-                )}
-            </button>
+        <Dialog open={open} onOpenChange={setOpen}>
+            <DialogTrigger asChild>
+                <button
+                    className="relative p-2 rounded-full hover:bg-white/10 transition-colors"
+                    aria-label="Notifications"
+                >
+                    <Bell className="w-5 h-5 text-white/80" />
+                    {unreadCount > 0 && (
+                        <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1 animate-pulse">
+                            {unreadCount > 99 ? "99+" : unreadCount}
+                        </span>
+                    )}
+                </button>
+            </DialogTrigger>
 
-            {/* Panel */}
-            {open && (
-                <div className="absolute right-0 top-10 w-80 sm:w-96 z-50 rounded-2xl shadow-2xl border border-white/10 bg-gray-900/95 backdrop-blur-xl overflow-hidden">
-                    {/* Header */}
-                    <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
+            <DialogContent
+                className="w-[calc(100vw-32px)] sm:w-[450px] p-0 gap-0 rounded-2xl border-white/10 bg-gray-900/95 backdrop-blur-xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-300"
+            >
+                {/* Header */}
+                <DialogHeader className="px-6 py-4 border-b border-white/10 text-left">
+                    <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
-                            <Bell className="w-4 h-4 text-purple-400" />
-                            <span className="font-semibold text-white text-sm">Notifications</span>
+                            <div className="bg-purple-500/20 p-2 rounded-lg">
+                                <Bell className="w-4 h-4 text-purple-400" />
+                            </div>
+                            <DialogTitle className="text-lg font-bold text-white">Notifications</DialogTitle>
                             {unreadCount > 0 && (
-                                <span className="bg-red-500 text-white text-[10px] font-bold rounded-full px-1.5 py-0.5">
-                                    {unreadCount}
+                                <span className="bg-red-500 text-white text-[10px] font-black rounded-full px-2 py-0.5 shadow-lg shadow-red-500/20 animate-pulse">
+                                    {unreadCount} NEW
                                 </span>
                             )}
                         </div>
-                        <div className="flex items-center gap-1">
+                        <div className="flex items-center gap-2 mr-6">
                             {unreadCount > 0 && (
                                 <button
                                     onClick={handleMarkAllRead}
-                                    className="text-xs text-purple-400 hover:text-purple-300 flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-white/5 transition-colors"
+                                    className="text-[10px] font-black uppercase tracking-wider text-purple-400 hover:text-purple-300 flex items-center gap-1.5 px-3 py-1.5 rounded-full hover:bg-purple-500/10 transition-all border border-purple-500/20"
                                 >
                                     <CheckCheck className="w-3 h-3" />
-                                    All read
+                                    Mark All Read
                                 </button>
                             )}
-                            <button
-                                onClick={() => setOpen(false)}
-                                className="p-1 rounded-lg hover:bg-white/10 transition-colors text-white/50 hover:text-white"
-                            >
-                                <X className="w-4 h-4" />
-                            </button>
                         </div>
                     </div>
+                </DialogHeader>
 
-                    {/* List */}
-                    <div className="max-h-[420px] overflow-y-auto">
-                        {notifications.length === 0 ? (
-                            <div className="flex flex-col items-center justify-center py-12 text-white/40">
-                                <Bell className="w-10 h-10 mb-3 opacity-30" />
-                                <p className="text-sm">No notifications yet</p>
+                {/* List */}
+                <div className="max-h-[60dvh] sm:max-h-[500px] overflow-y-auto scrollbar-thin scrollbar-thumb-white/10">
+                    {notifications.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center py-20 text-white/40">
+                            <div className="bg-white/5 p-6 rounded-full mb-4">
+                                <Bell className="w-12 h-12 opacity-20" />
                             </div>
-                        ) : (
-                            notifications.map(n => {
+                            <p className="text-sm font-medium">All caught up!</p>
+                            <p className="text-xs opacity-50">No new notifications to show.</p>
+                        </div>
+                    ) : (
+                        <div className="divide-y divide-white/5">
+                            {notifications.map(n => {
                                 const cfg = typeConfig[n.type] || typeConfig.info;
                                 const Icon = cfg.icon;
                                 return (
                                     <div
                                         key={n.id}
-                                        className={`w-full text-left px-4 py-3 border-b border-white/5 hover:bg-white/5 transition-colors flex gap-3 group ${!n.isRead ? "bg-white/[0.03]" : ""}`}
+                                        className={`w-full text-left px-6 py-5 hover:bg-white/[0.03] transition-all flex gap-4 group relative ${!n.isRead ? "bg-white/[0.05]" : ""}`}
                                     >
                                         <button
                                             onClick={() => handleMarkRead(n.id)}
-                                            className="flex-shrink-0 flex items-center justify-center"
+                                            className="flex-shrink-0"
                                         >
-                                            <div className={`w-8 h-8 rounded-full ${cfg.bg} ${cfg.border} border flex items-center justify-center`}>
-                                                <Icon className={`w-4 h-4 ${cfg.color}`} />
+                                            <div className={`w-10 h-10 rounded-xl ${cfg.bg} ${cfg.border} border flex items-center justify-center shadow-inner`}>
+                                                <Icon className={`w-5 h-5 ${cfg.color}`} />
                                             </div>
                                         </button>
 
                                         {/* Content */}
                                         <div className="flex-1 min-w-0 cursor-pointer" onClick={() => handleMarkRead(n.id)}>
-                                            <div className="flex items-start justify-between gap-2">
-                                                <p className={`text-sm font-medium leading-tight ${n.isRead ? "text-white/70" : "text-white"}`}>
+                                            <div className="flex items-start justify-between gap-3">
+                                                <p className={`text-sm font-bold leading-tight ${n.isRead ? "text-white/60" : "text-white"}`}>
                                                     {n.title}
                                                 </p>
                                                 {!n.isRead && (
-                                                    <span className="flex-shrink-0 w-2 h-2 bg-purple-400 rounded-full mt-1" />
+                                                    <span className="flex-shrink-0 w-2 h-2 bg-purple-400 rounded-full mt-1 shadow-[0_0_8px_rgba(168,85,247,0.5)]" />
                                                 )}
                                             </div>
-                                            <p className="text-xs text-white/50 mt-0.5 leading-relaxed line-clamp-2">
+                                            <p className={`text-xs mt-1 leading-relaxed line-clamp-2 ${n.isRead ? "text-white/40" : "text-white/70"}`}>
                                                 {n.message}
                                             </p>
-                                            <p className="text-[10px] text-white/30 mt-1">
+                                            <p className="text-[10px] font-mono font-medium text-white/20 mt-2 uppercase tracking-tight">
                                                 {timeAgo(n.createdAt)}
                                             </p>
                                         </div>
@@ -214,27 +221,30 @@ export default function NotificationBell() {
                                                 e.stopPropagation();
                                                 handleDelete(n.id);
                                             }}
-                                            className="opacity-0 group-hover:opacity-100 p-1.5 hover:bg-red-500/20 rounded-lg text-white/30 hover:text-red-400 transition-all self-start"
+                                            className="opacity-0 group-hover:opacity-100 p-2 hover:bg-red-500/20 rounded-xl text-white/20 hover:text-red-400 transition-all self-center ml-2"
                                             title="Delete notification"
                                         >
-                                            <Trash2 className="w-3.5 h-3.5" />
+                                            <X className="w-4 h-4" />
                                         </button>
                                     </div>
                                 );
-                            })
-                        )}
-                    </div>
-
-                    {/* Footer */}
-                    {notifications.length > 0 && (
-                        <div className="px-4 py-2 border-t border-white/10 text-center">
-                            <p className="text-[10px] text-white/30">
-                                {notifications.length} notification{notifications.length !== 1 ? "s" : ""} total
-                            </p>
+                            })}
                         </div>
                     )}
                 </div>
-            )}
-        </div>
+
+                {/* Footer */}
+                {notifications.length > 0 && (
+                    <div className="px-6 py-3 bg-white/[0.02] border-t border-white/5 flex items-center justify-between">
+                        <p className="text-[10px] font-bold text-white/20 uppercase tracking-widest">
+                            Syncing via Cloud
+                        </p>
+                        <p className="text-[10px] font-bold text-white/30">
+                            {notifications.length} TOTAL
+                        </p>
+                    </div>
+                )}
+            </DialogContent>
+        </Dialog>
     );
 }

@@ -289,9 +289,9 @@ const AdminDashboard = () => {
     { id: "users" as const, label: "Users", icon: Users, count: stats?.totalUsers },
     { id: "chats" as const, label: "Chats", icon: MessageSquare, count: stats?.totalChats },
     { id: "escrow" as const, label: "Escrow", icon: IndianRupee, count: stats?.totalEscrowDeals },
-    { id: "verifications" as const, label: "Verifications", icon: CheckCircle2 },
-    { id: "payouts" as const, label: "Payouts", icon: Wallet },
-    { id: "reports" as const, label: "Reports", icon: AlertTriangle },
+    { id: "verifications" as const, label: "Verifications", icon: CheckCircle2, count: stats?.pendingVerifications },
+    { id: "payouts" as const, label: "Payouts", icon: Wallet, count: stats?.pendingPayouts },
+    { id: "reports" as const, label: "Reports", icon: AlertTriangle, count: stats?.pendingReports },
     { id: "activity" as const, label: "Activity", icon: Activity },
     { id: "broadcast" as const, label: "Broadcast", icon: Bell },
     { id: "settings" as const, label: "Settings", icon: Settings },
@@ -326,7 +326,12 @@ const AdminDashboard = () => {
               <tab.icon className="h-4 w-4" />
               <span className="flex-1 text-left">{tab.label}</span>
               {tab.count !== undefined && (
-                <Badge variant="secondary" className="text-xs">{tab.count}</Badge>
+                <Badge
+                  variant={(['verifications', 'payouts', 'reports'].includes(tab.id) && tab.count > 0) ? "destructive" : "secondary"}
+                  className="text-[10px] h-4 px-1.5 min-w-[16px] flex justify-center items-center"
+                >
+                  {tab.count}
+                </Badge>
               )}
             </button>
           ))}
@@ -353,10 +358,17 @@ const AdminDashboard = () => {
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className={`flex-1 flex flex-col items-center py-3 text-xs ${activeTab === tab.id ? "text-primary" : "text-muted-foreground"
+            className={`flex-1 flex flex-col items-center py-3 text-[10px] relative ${activeTab === tab.id ? "text-primary" : "text-muted-foreground"
               }`}
           >
-            <tab.icon className="h-5 w-5 mb-1" />
+            <div className="relative">
+              <tab.icon className="h-5 w-5 mb-1" />
+              {tab.count !== undefined && tab.count > 0 && (
+                <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-[8px] text-white">
+                  {tab.count > 99 ? '99+' : tab.count}
+                </span>
+              )}
+            </div>
             {tab.label}
           </button>
         ))}
@@ -456,6 +468,53 @@ const AdminDashboard = () => {
                       </div>
                       <p className="text-xs text-muted-foreground mt-1">
                         In escrow
+                      </p>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <Card className="bg-card border-border border-l-4 border-l-amber-500">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm font-medium text-muted-foreground flex items-center justify-between">
+                        Pending Payouts
+                        <Wallet className="h-4 w-4 text-amber-500" />
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-2xl font-bold text-card-foreground">{stats.pendingPayouts}</div>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Requires processing
+                      </p>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="bg-card border-border border-l-4 border-l-blue-500">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm font-medium text-muted-foreground flex items-center justify-between">
+                        Pending Verifications
+                        <CheckCircle2 className="h-4 w-4 text-blue-500" />
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-2xl font-bold text-card-foreground">{stats.pendingVerifications}</div>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Awaiting review
+                      </p>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="bg-card border-border border-l-4 border-l-destructive">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm font-medium text-muted-foreground flex items-center justify-between">
+                        Pending Reports
+                        <AlertTriangle className="h-4 w-4 text-destructive" />
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-2xl font-bold text-card-foreground">{stats.pendingReports}</div>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Need moderator attention
                       </p>
                     </CardContent>
                   </Card>
@@ -561,7 +620,7 @@ const AdminDashboard = () => {
                           variant="ghost"
                           size="icon"
                           title="Open in Chat"
-                          onClick={() => navigate(`/chat?chatId=${chat.chatId}`)}
+                          onClick={() => navigate(`/admin/chats/${chat.chatId}`)}
                         >
                           <MessageSquare className="h-4 w-4" />
                         </Button>

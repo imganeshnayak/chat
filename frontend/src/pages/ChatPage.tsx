@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   Search, Send, Paperclip, Smile, ArrowLeft, Image, FileText,
   Mic, MoreVertical, IndianRupee, User as UserIcon, Plus,
-  Trash2, Ban, AlertTriangle, Download, X, CheckCircle2, Loader2, LogOut, Settings, User, HelpCircle, ShieldCheck, EyeOff, Eye
+  Trash2, Ban, AlertTriangle, Download, X, CheckCircle2, Loader2, LogOut, Settings, User, HelpCircle, ShieldCheck, EyeOff, Eye, Lock
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
@@ -281,7 +281,11 @@ const ChatView = ({
   pendingFile,
   setPendingFile,
   handleConfirmUpload,
-  isLoading
+  isLoading,
+  isBlurred,
+  setIsBlurred,
+  isPreviewViewOnce,
+  setIsPreviewViewOnce
 }: {
   selectedChat: ChatType | null;
   setSelectedChat: (chat: ChatType | null) => void;
@@ -304,7 +308,12 @@ const ChatView = ({
   setPendingFile: (file: File | null) => void;
   handleConfirmUpload: (caption: string, viewOnce: boolean) => void;
   isLoading: boolean;
+  isBlurred: boolean;
+  setIsBlurred: (val: boolean) => void;
+  isPreviewViewOnce: boolean;
+  setIsPreviewViewOnce: (val: boolean) => void;
 }) => {
+  const [isHoldingView, setIsHoldingView] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
 
@@ -348,9 +357,18 @@ const ChatView = ({
     }
   };
 
+  const scrollingRef = useRef(false);
+
   useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
+    if (messages.length > 0 && selectedChat) {
+      // Use auto for chat switch, smooth for new messages
+      const behavior = scrollingRef.current ? "smooth" : "auto";
+      messagesEndRef.current?.scrollIntoView({ behavior });
+      scrollingRef.current = true;
+    } else {
+      scrollingRef.current = false;
+    }
+  }, [messages.length, selectedChat?.chat_id]);
 
   const handleOpenViewOnce = async (msg: MessageType) => {
     if (msg.senderId === user?.id) return; // Don't handle opening for sender (local only)
@@ -375,7 +393,20 @@ const ChatView = ({
   }
 
   return (
-    <div className="flex flex-col h-full bg-background overflow-hidden">
+    <div className={`flex flex-col h-full bg-background relative overflow-hidden ${isBlurred ? 'blur-privacy' : ''}`}>
+      {/* Privacy Screen Overlay */}
+      {isBlurred && (
+        <div className="absolute inset-0 z-[100] flex items-center justify-center bg-background/80 backdrop-blur-3xl animate-in fade-in duration-300">
+          <div className="text-center p-6 scale-in-95 animate-in duration-300">
+            <div className="bg-primary/10 p-4 rounded-full w-20 h-20 flex items-center justify-center mx-auto mb-4 border border-primary/20">
+              <Lock className="h-10 w-10 text-primary" />
+            </div>
+            <h2 className="text-xl font-bold text-foreground mb-1">Privacy Protected</h2>
+            <p className="text-sm text-muted-foreground">Screen capture is restricted.</p>
+          </div>
+        </div>
+      )}
+
       {/* Chat header */}
       <div className="flex items-center gap-3 p-4 border-b border-border sticky top-0 z-20 bg-background/95 backdrop-blur-md min-h-[73px]">
         {isSelectionMode ? (
@@ -428,7 +459,7 @@ const ChatView = ({
               </p>
             </div>
             <div className="flex gap-1">
-              <Button variant="ghost" size="icon" onClick={() => navigate(`/profile/${selectedChat.user_id}`)}>
+              <Button variant="ghost" size="icon" onClick={() => navigate(`/profile/${selectedChat.username}`)}>
                 <UserIcon className="h-5 w-5" />
               </Button>
               <Button
@@ -450,250 +481,243 @@ const ChatView = ({
       </div>
 
       {/* Messages */}
-      <ScrollArea className="flex-1 p-4">
-        <div className="space-y-3">
-          {messages.length === 0 ? (
-            <div className="text-center text-muted-foreground py-8">Start a conversation</div>
-          ) : (
-            messages.map((msg) => {
-              const isMine = msg.senderId === user?.id;
-              const isAdminMsg = selectedChat?.isOfficial && (!isMine || user?.role === 'admin');
-              const isEscrowOrNotify = msg.messageType?.startsWith?.('escrow_') || (msg as any).message_type?.startsWith?.('escrow_') || msg.messageType === 'notification' || (msg as any).message_type === 'notification' || isAdminMsg;
+      <div className="flex-1 relative overflow-hidden min-h-0 bg-background">
 
-              return (
-                <div
-                  key={msg.id}
-                  className={`flex ${isMine ? "justify-end" : "justify-start"} items-center gap-2 group relative ${selectedMessages.includes(msg.id) ? "bg-primary/10 -mx-4 px-4 py-1" : ""}`}
-                  onClick={() => handleMessageClick(msg)}
-                  onTouchStart={() => onTouchStart(msg.id)}
-                  onTouchEnd={onTouchEnd}
-                  onContextMenu={(e) => {
-                    if (isMobile) {
-                      e.preventDefault();
-                      toggleMessageSelection(msg.id);
-                    }
-                  }}
-                >
-                  {isSelectionMode && (
-                    <div className={`absolute ${isMine ? "left-2" : "right-2"} z-10`}>
-                      <div className={`h-5 w-5 rounded-full border-2 ${selectedMessages.includes(msg.id) ? "bg-primary border-primary flex items-center justify-center" : "border-muted-foreground"}`}>
-                        {selectedMessages.includes(msg.id) && <CheckCircle2 className="h-3 w-3 text-primary-foreground" />}
+        <div
+          className="h-full overflow-y-auto scrollbar-thin scrollbar-thumb-primary/20 scroll-smooth relative z-10"
+        >
+          <div className="px-4 pt-4 pb-2 space-y-3">
+            {messages.length === 0 ? (
+              <div className="text-center text-muted-foreground py-8">Start a conversation</div>
+            ) : (
+              messages.map((msg, index) => {
+                const isMine = msg.senderId === user?.id;
+                const isAdminMsg = selectedChat?.isOfficial && (!isMine || user?.role === 'admin');
+                const isEscrowOrNotify = msg.messageType?.startsWith?.('escrow_') || (msg as any).message_type?.startsWith?.('escrow_') || msg.messageType === 'notification' || (msg as any).message_type === 'notification' || isAdminMsg;
+
+                // Date separator logic
+                const currentDate = new Date(msg.createdAt).toDateString();
+                const previousDate = index > 0 ? new Date(messages[index - 1].createdAt).toDateString() : null;
+                const showDateSeparator = currentDate !== previousDate;
+
+                return (
+                  <React.Fragment key={msg.id}>
+                    {showDateSeparator && (
+                      <div className="flex justify-center my-6">
+                        <span className="bg-secondary/60 text-secondary-foreground text-[11px] font-bold px-3 py-1.5 rounded-full border border-border/50 uppercase tracking-tighter shadow-sm backdrop-blur-sm">
+                          {new Date(msg.createdAt).toLocaleDateString(undefined, {
+                            weekday: 'long',
+                            month: 'short',
+                            day: 'numeric'
+                          })}
+                        </span>
                       </div>
-                    </div>
-                  )}
-                  {!msg.isDeleted && !isSelectionMode && !isMobile && (
-                    <div className={`opacity-0 group-hover:opacity-100 transition-opacity ${isMine ? "order-first" : "order-last"}`}>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full hover:bg-secondary">
-                            <MoreVertical className="h-4 w-4 text-muted-foreground" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align={isMine ? "end" : "start"} className="w-32 bg-card border-border">
-                          {isMine && (
-                            <DropdownMenuItem
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                onMessageDeleted(msg.id);
-                              }}
-                              className="text-destructive focus:text-destructive"
-                            >
-                              <Trash2 className="mr-2 h-4 w-4" /> Delete
-                            </DropdownMenuItem>
-                          )}
-                          <DropdownMenuItem
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              toggleMessageSelection(msg.id);
-                            }}
-                          >
-                            <CheckCircle2 className="mr-2 h-4 w-4" /> Select
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
-                  )}
-                  <div
-                    className={`max-w-[85%] rounded-2xl px-4 py-3 relative ${isMine
-                      ? (isEscrowOrNotify ? "" : "bg-primary text-primary-foreground rounded-br-md")
-                      : (isEscrowOrNotify ? "" : "bg-secondary text-secondary-foreground rounded-bl-md")
-                      } ${msg.isDeleted ? "opacity-60 italic" : ""} ${isEscrowOrNotify ? (
-                        (msg.messageType === 'escrow_released' || (msg as any).message_type === 'escrow_released')
-                          ? "bg-gradient-to-br from-emerald-600 to-teal-700 text-white shadow-lg border border-white/20 rounded-2xl"
-                          : (msg.messageType === 'notification' || (msg as any).message_type === 'notification' || isAdminMsg)
-                            ? (isAdminMsg ? (msg.color ? "" : "bg-gradient-to-br from-blue-600 via-indigo-700 to-violet-800 text-white shadow-xl border border-white/30 rounded-2xl") : "bg-gradient-to-br from-amber-500 to-orange-600 text-white shadow-lg border border-white/20 rounded-2xl")
-                            : "bg-gradient-to-br from-indigo-600 to-purple-700 text-white shadow-lg border border-white/20 rounded-2xl"
-                      ) : ""}`}
-                    style={isEscrowOrNotify && isAdminMsg && msg.color ? {
-                      background: `linear-gradient(135deg, ${msg.color} 0%, ${msg.color}cc 100%)`,
-                      boxShadow: `0 10px 15px -3px ${msg.color}40`,
-                      border: '1px solid rgba(255,255,255,0.3)'
-                    } : {}}
-                  >
-                    {msg.isViewOnce ? (
-                      <div
-                        className={`flex items-center gap-3 py-1 cursor-pointer transition-all active:scale-95 ${msg.isOpened ? 'opacity-60' : 'hover:opacity-80'}`}
-                        onClick={(e) => {
-                          if (!isMine && !msg.isOpened && !isSelectionMode) {
-                            e.stopPropagation();
-                            if (msg.attachmentUrl) {
-                              setPreviewImage(msg.attachmentUrl);
-                              handleOpenViewOnce(msg);
-                            } else {
-                              // If it's just text, we can show it in a toggle or handled by the parent bubble
-                            }
-                          }
-                        }}
-                      >
-                        <div className={`h-8 w-8 rounded-full flex items-center justify-center ${isMine ? 'bg-white/20' : 'bg-primary/10 text-primary'}`}>
-                          {msg.isOpened ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                        </div>
-                        <div className="flex flex-col">
-                          <span className="text-sm font-bold">
-                            {msg.isOpened ? "Viewed" : (isMine ? "Photo" : "View Photo")}
-                          </span>
-                          {!msg.isOpened && !isMine && <span className="text-[10px] opacity-70">Click to view once</span>}
-                        </div>
-                      </div>
-                    ) : isEscrowOrNotify ? (
-                      <div className="space-y-3">
-                        <div className="flex items-center gap-3">
-                          <div className={`h-10 w-10 rounded-full flex items-center justify-center backdrop-blur-md shadow-inner ${isAdminMsg ? 'bg-white/30 border border-white/40' : 'bg-white/20'}`}>
-                            {msg.messageType === 'escrow_created' || (msg as any).message_type === 'escrow_created' ? <Plus className="h-5 w-5" /> : (
-                              (msg.messageType === 'escrow_released' || (msg as any).message_type === 'escrow_released') ? <IndianRupee className="h-5 w-5" /> : (
-                                (msg.messageType === 'notification' || (msg as any).message_type === 'notification' || isAdminMsg) ? <ShieldCheck className="h-5 w-5" /> : <ShieldCheck className="h-5 w-5" />
-                              )
-                            )}
-                          </div>
-                          <div>
-                            <p className="font-bold text-base leading-none flex items-center gap-1.5">
-                              {isAdminMsg ? (
-                                <>
-                                  <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-                                  Admin Support
-                                </>
-                              ) : msg.messageType === 'escrow_created' || (msg as any).message_type === 'escrow_created' ? "Escrow Deal Created" : (
-                                (msg.messageType === 'escrow_released' || (msg as any).message_type === 'escrow_released') ? "Payment Released" : (
-                                  (msg.messageType === 'notification' || (msg as any).message_type === 'notification') ? (msg.content.match(/\*\*(.*?)\*\*/) ? msg.content.match(/\*\*(.*?)\*\*/)?.[1] : "System Update") : "Payment Confirmed"
-                                )
-                              )}
-                            </p>
-                            <p className="text-[10px] text-white/70 mt-1 uppercase tracking-wider font-bold">
-                              {isAdminMsg ? "Official Help Center" : (msg.messageType === 'notification' || (msg as any).message_type === 'notification') ? "Official Notification" : "Official Escrow System"}
-                            </p>
-                          </div>
-                        </div>
-                        <div className={`bg-black/20 rounded-xl p-3 border border-white/10 backdrop-blur-sm ${isAdminMsg ? 'border-white/20' : ''}`}>
-                          <p className="text-sm font-medium leading-relaxed">
-                            {isAdminMsg ? (
-                              msg.content.split('\n').map((line, i) => (
-                                <React.Fragment key={i}>
-                                  {line.split(/(\*\*.*?\*\*)/).map((part, j) => {
-                                    if (part.startsWith('**') && part.endsWith('**')) {
-                                      return <strong key={j} className="text-emerald-300">{part.slice(2, -2)}</strong>;
-                                    }
-                                    return part;
-                                  })}
-                                  {i < msg.content.split('\n').length - 1 && <br />}
-                                </React.Fragment>
-                              ))
-                            ) : (msg.messageType === 'notification' || (msg as any).message_type === 'notification') ? msg.content.split('\n\n')[1] || msg.content.replace(/🔔 \*\*(.*?)\*\*\n\n/, '') : msg.content}
-                          </p>
-                        </div>
-                        {(msg.messageType?.startsWith?.('escrow_') || (msg as any).message_type?.startsWith?.('escrow_')) && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              navigate('/escrow');
-                            }}
-                            className={`w-full py-2 bg-white rounded-lg text-sm font-bold shadow-sm hover:bg-white/90 transition-all flex items-center justify-center gap-2 active:scale-[0.98] ${(msg.messageType === 'escrow_released' || (msg as any).message_type === 'escrow_released') ? "text-emerald-700" : "text-indigo-700"
-                              }`}
-                          >
-                            View Details <ArrowLeft className="h-4 w-4 rotate-180" />
-                          </button>
-                        )}
-                      </div>
-                    ) : (
-                      <p className="text-sm">{msg.content}</p>
                     )}
-                    {msg.attachmentUrl && !msg.isDeleted && !msg.isViewOnce && (
-                      <div className="mt-2 p-2 bg-black/10 rounded-lg flex items-center gap-2">
-                        {msg.messageType === 'image' || msg.attachmentUrl.match(/\.(jpg|jpeg|png|gif|webp)$/i) ? (
+                    <div
+                      className={`flex ${isMine ? "justify-end" : "justify-start"} items-center gap-2 group relative ${selectedMessages.includes(msg.id) ? "bg-primary/10 -mx-4 px-4 py-1" : ""}`}
+                      onClick={() => handleMessageClick(msg)}
+                      onTouchStart={() => onTouchStart(msg.id)}
+                      onTouchEnd={onTouchEnd}
+                      onContextMenu={(e) => {
+                        if (isMobile) {
+                          e.preventDefault();
+                          toggleMessageSelection(msg.id);
+                        }
+                      }}
+                    >
+                      {isSelectionMode && (
+                        <div className={`absolute ${isMine ? "left-2" : "right-2"} z-10`}>
+                          <div className={`h-5 w-5 rounded-full border-2 ${selectedMessages.includes(msg.id) ? "bg-primary border-primary flex items-center justify-center" : "border-muted-foreground"}`}>
+                            {selectedMessages.includes(msg.id) && <CheckCircle2 className="h-3 w-3 text-primary-foreground" />}
+                          </div>
+                        </div>
+                      )}
+                      {!msg.isDeleted && !isSelectionMode && !isMobile && (
+                        <div className={`opacity-0 group-hover:opacity-100 transition-opacity ${isMine ? "order-first" : "order-last"}`}>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full hover:bg-secondary">
+                                <MoreVertical className="h-4 w-4 text-muted-foreground" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align={isMine ? "end" : "start"} className="w-32 bg-card border-border">
+                              {isMine && (
+                                <DropdownMenuItem
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    onMessageDeleted(msg.id);
+                                  }}
+                                  className="text-destructive focus:text-destructive"
+                                >
+                                  <Trash2 className="mr-2 h-4 w-4" /> Delete
+                                </DropdownMenuItem>
+                              )}
+                              <DropdownMenuItem
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  toggleMessageSelection(msg.id);
+                                }}
+                              >
+                                <CheckCircle2 className="mr-2 h-4 w-4" /> Select
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
+                      )}
+                      <div
+                        className={`max-w-[85%] rounded-2xl px-4 py-3 relative privacy-protected ${isMine
+                          ? (isEscrowOrNotify ? "" : "bg-primary text-primary-foreground rounded-br-md")
+                          : (isEscrowOrNotify ? "" : "bg-secondary text-secondary-foreground rounded-bl-md")
+                          } ${msg.isDeleted ? "opacity-60 italic" : ""} ${isEscrowOrNotify ? (
+                            (msg.messageType === 'escrow_released' || (msg as any).message_type === 'escrow_released')
+                              ? "bg-gradient-to-br from-emerald-600 to-teal-700 text-white shadow-lg border border-white/20 rounded-2xl"
+                              : (msg.messageType === 'notification' || (msg as any).message_type === 'notification' || isAdminMsg)
+                                ? (isAdminMsg ? (msg.color ? "" : "bg-gradient-to-br from-blue-600 via-indigo-700 to-violet-800 text-white shadow-xl border border-white/30 rounded-2xl") : "bg-gradient-to-br from-amber-500 to-orange-600 text-white shadow-lg border border-white/20 rounded-2xl")
+                                : "bg-gradient-to-br from-indigo-600 to-purple-700 text-white shadow-lg border border-white/20 rounded-2xl"
+                          ) : ""}`}
+                        style={isEscrowOrNotify && isAdminMsg && msg.color ? {
+                          background: `linear-gradient(135deg, ${msg.color} 0%, ${msg.color}cc 100%)`,
+                          boxShadow: `0 10px 15px -3px ${msg.color}40`,
+                          border: '1px solid rgba(255,255,255,0.3)'
+                        } : {}}
+                      >
+                        {msg.isViewOnce ? (
                           <div
-                            className="cursor-pointer hover:opacity-90 transition-opacity relative"
-                            onClick={() => setPreviewImage(msg.attachmentUrl || null)}
+                            className={`flex items-center gap-3 py-1 cursor-pointer transition-all active:scale-95 ${msg.isOpened ? 'opacity-60' : 'hover:opacity-80'}`}
+                            onClick={(e) => {
+                              if (!isMine && !msg.isOpened && !isSelectionMode) {
+                                e.stopPropagation();
+                                if (msg.attachmentUrl) {
+                                  setIsPreviewViewOnce(true);
+                                  setPreviewImage(msg.attachmentUrl);
+                                  handleOpenViewOnce(msg);
+                                }
+                              }
+                            }}
                           >
-                            <img src={msg.attachmentUrl} alt="attachment" className="max-w-full rounded h-48 object-cover shadow-sm border border-white/10" />
-                            {(msg as any).isUploading && (
-                              <div className="absolute inset-0 bg-black/40 rounded flex items-center justify-center backdrop-blur-sm">
-                                <Loader2 className="h-8 w-8 text-white animate-spin" />
+                            <div className={`h-8 w-8 rounded-full flex items-center justify-center ${isMine ? 'bg-white/20' : 'bg-primary/10 text-primary'}`}>
+                              {msg.isOpened ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                            </div>
+                            <div className="flex flex-col">
+                              <span className="text-sm font-bold">
+                                {msg.isOpened ? "Viewed" : (isMine ? "Photo" : "View Photo")}
+                              </span>
+                              {!msg.isOpened && !isMine && <span className="text-[10px] opacity-70">Click to view once</span>}
+                            </div>
+                          </div>
+                        ) : isEscrowOrNotify ? (
+                          <div className="space-y-3">
+                            <div className="flex items-center gap-3">
+                              <div className={`h-10 w-10 rounded-full flex items-center justify-center backdrop-blur-md shadow-inner ${isAdminMsg ? 'bg-white/30 border border-white/40' : 'bg-white/20'}`}>
+                                {msg.messageType === 'escrow_created' || (msg as any).message_type === 'escrow_created' ? <Plus className="h-5 w-5" /> : (
+                                  (msg.messageType === 'escrow_released' || (msg as any).message_type === 'escrow_released') ? <IndianRupee className="h-5 w-5" /> : (
+                                    (msg.messageType === 'notification' || (msg as any).message_type === 'notification' || isAdminMsg) ? <ShieldCheck className="h-5 w-5" /> : <ShieldCheck className="h-5 w-5" />
+                                  )
+                                )}
                               </div>
+                              <div>
+                                <p className="font-bold text-base leading-none flex items-center gap-1.5">
+                                  {isAdminMsg ? (
+                                    <>
+                                      <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+                                      Admin Support
+                                    </>
+                                  ) : msg.messageType === 'escrow_created' || (msg as any).message_type === 'escrow_created' ? "Escrow Deal Created" : (
+                                    (msg.messageType === 'escrow_released' || (msg as any).message_type === 'escrow_released') ? "Payment Released" : (
+                                      (msg.messageType === 'notification' || (msg as any).message_type === 'notification') ? (msg.content.match(/\*\*(.*?)\*\*/) ? msg.content.match(/\*\*(.*?)\*\*/)?.[1] : "System Update") : "Payment Confirmed"
+                                    )
+                                  )}
+                                </p>
+                                <p className="text-[10px] text-white/70 mt-1 uppercase tracking-wider font-bold">
+                                  {isAdminMsg ? "Official Help Center" : (msg.messageType === 'notification' || (msg as any).message_type === 'notification') ? "Official Notification" : "Official Escrow System"}
+                                </p>
+                              </div>
+                            </div>
+                            <div className={`bg-black/20 rounded-xl p-3 border border-white/10 backdrop-blur-sm ${isAdminMsg ? 'border-white/20' : ''}`}>
+                              <p className="text-sm font-medium leading-relaxed">
+                                {isAdminMsg ? (
+                                  msg.content.split('\n').map((line, i) => (
+                                    <React.Fragment key={i}>
+                                      {line.split(/(\*\*.*?\*\*)/).map((part, j) => {
+                                        if (part.startsWith('**') && part.endsWith('**')) {
+                                          return <strong key={j} className="text-emerald-300">{part.slice(2, -2)}</strong>;
+                                        }
+                                        return part;
+                                      })}
+                                      {i < msg.content.split('\n').length - 1 && <br />}
+                                    </React.Fragment>
+                                  ))
+                                ) : (msg.messageType === 'notification' || (msg as any).message_type === 'notification') ? msg.content.split('\n\n')[1] || msg.content.replace(/🔔 \*\*(.*?)\*\*\n\n/, '') : msg.content}
+                              </p>
+                            </div>
+                            {(msg.messageType?.startsWith?.('escrow_') || (msg as any).message_type?.startsWith?.('escrow_')) && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  navigate('/escrow');
+                                }}
+                                className={`w-full py-2 bg-white rounded-lg text-sm font-bold shadow-sm hover:bg-white/90 transition-all flex items-center justify-center gap-2 active:scale-[0.98] ${(msg.messageType === 'escrow_released' || (msg as any).message_type === 'escrow_released') ? "text-emerald-700" : "text-indigo-700"
+                                  }`}
+                              >
+                                View Details <ArrowLeft className="h-4 w-4 rotate-180" />
+                              </button>
                             )}
                           </div>
                         ) : (
-                          <div className="flex items-center gap-2 overflow-hidden">
-                            <FileText className="h-5 w-5 shrink-0" />
-                            <button
-                              onClick={(e) => {
-                                e.preventDefault();
-                                downloadFile(msg.attachmentUrl || "", msg.attachmentName || "download");
-                              }}
-                              className="text-xs underline truncate hover:text-primary transition-colors flex items-center gap-1"
-                            >
-                              {msg.attachmentName || 'Download File'}
-                              <Download className="h-3 w-3" />
-                            </button>
+                          <p className="text-sm">{msg.content}</p>
+                        )}
+                        {msg.attachmentUrl && !msg.isDeleted && !msg.isViewOnce && (
+                          <div className="mt-2 p-2 bg-black/10 rounded-lg flex items-center gap-2">
+                            {msg.messageType === 'image' || msg.attachmentUrl.match(/\.(jpg|jpeg|png|gif|webp)$/i) ? (
+                              <div
+                                className="cursor-pointer hover:opacity-90 transition-opacity relative privacy-protected"
+                                onContextMenu={(e) => e.preventDefault()}
+                                onClick={() => {
+                                  setIsPreviewViewOnce(false);
+                                  setPreviewImage(msg.attachmentUrl || null);
+                                }}
+                              >
+                                <img src={msg.attachmentUrl} alt="attachment" className="max-w-full rounded h-48 object-cover shadow-sm border border-white/10 select-none pointer-events-none" />
+                                {(msg as any).isUploading && (
+                                  <div className="absolute inset-0 bg-black/40 rounded flex items-center justify-center backdrop-blur-sm">
+                                    <Loader2 className="h-8 w-8 text-white animate-spin" />
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-2 overflow-hidden">
+                                <FileText className="h-5 w-5 shrink-0" />
+                                <button
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    downloadFile(msg.attachmentUrl || "", msg.attachmentName || "download");
+                                  }}
+                                  className="text-xs underline truncate hover:text-primary transition-colors flex items-center gap-1"
+                                >
+                                  {msg.attachmentName || 'Download File'}
+                                  <Download className="h-3 w-3" />
+                                </button>
+                              </div>
+                            )}
                           </div>
                         )}
+                        <p
+                          className={`text-[10px] mt-1 ${isMine ? "text-primary-foreground/70" : "text-muted-foreground"
+                            }`}
+                        >
+                          {formatTime(msg.createdAt)}
+                          {isMine && (msg.read ? " ✓✓" : " ✓")}
+                        </p>
                       </div>
-                    )}
-                    <p
-                      className={`text-[10px] mt-1 ${isMine ? "text-primary-foreground/70" : "text-muted-foreground"
-                        }`}
-                    >
-                      {formatTime(msg.createdAt)}
-                      {isMine && (msg.read ? " ✓✓" : " ✓")}
-                    </p>
-                  </div>
-                </div>
-              );
-            })
-          )}
-          <div ref={messagesEndRef} />
-        </div>
-      </ScrollArea>
-
-      {/* Image Preview Modal */}
-      <Dialog open={!!previewImage} onOpenChange={(open) => !open && setPreviewImage(null)}>
-        <DialogContent className="max-w-4xl p-0 overflow-hidden bg-transparent border-none shadow-none flex items-center justify-center">
-          <div className="relative group overflow-auto max-h-[90vh]">
-            <img
-              src={previewImage || ""}
-              alt="Preview"
-              className="max-w-full max-h-[85vh] h-auto object-contain rounded-lg shadow-2xl"
-            />
-            <div className="absolute top-4 right-4 flex gap-2">
-              <Button
-                variant="secondary"
-                size="icon"
-                className="rounded-full bg-black/50 hover:bg-black/70 border-none text-white h-10 w-10 shadow-lg backdrop-blur-sm"
-                onClick={() => setPreviewImage(null)}
-              >
-                <ArrowLeft className="h-5 w-5 rotate-180" />
-              </Button>
-              <button
-                onClick={() => {
-                  const filename = messages.find(m => m.attachmentUrl === previewImage)?.attachmentName || "download";
-                  downloadFile(previewImage || "", filename);
-                }}
-                className="flex items-center justify-center h-10 w-10 rounded-full bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg transition-transform active:scale-95"
-              >
-                <Download className="h-5 w-5" />
-              </button>
-            </div>
+                    </div>
+                  </React.Fragment>
+                );
+              })
+            )}
+            <div ref={messagesEndRef} className="h-4" />
           </div>
-        </DialogContent>
-      </Dialog>
+        </div>
+      </div>
 
       {/* Input */}
       <div className="p-3 border-t border-border">
@@ -739,6 +763,59 @@ const ChatView = ({
           </Button>
         </div>
       </div>
+
+      {/* Modals outside flex flow */}
+      <Dialog open={!!previewImage} onOpenChange={(open) => !open && setPreviewImage(null)}>
+        <DialogContent className="max-w-4xl p-0 overflow-hidden bg-transparent border-none shadow-none flex items-center justify-center">
+          <div
+            className={`relative group overflow-auto max-h-[90vh] ${isPreviewViewOnce && !isHoldingView ? 'blur-2xl grayscale' : ''}`}
+            onMouseDown={() => isPreviewViewOnce && setIsHoldingView(true)}
+            onMouseUp={() => setIsHoldingView(false)}
+            onMouseLeave={() => setIsHoldingView(false)}
+            onTouchStart={() => isPreviewViewOnce && setIsHoldingView(true)}
+            onTouchEnd={() => setIsHoldingView(false)}
+          >
+            <img
+              src={previewImage || ""}
+              alt="Preview"
+              className="max-w-full max-h-[85vh] h-auto object-contain rounded-lg shadow-2xl select-none pointer-events-none privacy-protected"
+              onContextMenu={(e) => e.preventDefault()}
+            />
+            {isPreviewViewOnce && !isHoldingView && (
+              <div className="absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-sm rounded-lg pointer-events-none">
+                <div className="text-center p-6 text-white">
+                  <div className="bg-white/20 p-4 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4 border border-white/30 backdrop-blur-md">
+                    <Eye className="h-8 w-8 text-white" />
+                  </div>
+                  <p className="text-lg font-bold">Press and hold to view</p>
+                  <p className="text-xs opacity-70 mt-1">Screen capture is blocked</p>
+                </div>
+              </div>
+            )}
+            <div className="absolute top-4 right-4 flex gap-2">
+              <Button
+                variant="secondary"
+                size="icon"
+                className="rounded-full bg-black/50 hover:bg-black/70 border-none text-white h-10 w-10 shadow-lg backdrop-blur-sm"
+                onClick={() => setPreviewImage(null)}
+              >
+                <ArrowLeft className="h-5 w-5 rotate-180" />
+              </Button>
+              {!isPreviewViewOnce && (
+                <button
+                  onClick={() => {
+                    const filename = messages.find(m => m.attachmentUrl === previewImage)?.attachmentName || "download";
+                    downloadFile(previewImage || "", filename);
+                  }}
+                  className="flex items-center justify-center h-10 w-10 rounded-full bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg transition-transform active:scale-95"
+                >
+                  <Download className="h-5 w-5" />
+                </button>
+              )}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <FilePreviewDialog
         file={pendingFile}
@@ -911,7 +988,7 @@ const ChatPage = () => {
 
   const handleLogout = useCallback(() => {
     logout();
-    navigate("/login");
+    navigate("/login", { replace: true });
   }, [logout, navigate]);
 
   // No longer redirecting admin to dashboard, allowing them to use ChatPage for support
@@ -930,6 +1007,67 @@ const ChatPage = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedMessages, setSelectedMessages] = useState<number[]>([]);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [isBlurred, setIsBlurred] = useState(false);
+  const [isPreviewViewOnce, setIsPreviewViewOnce] = useState(false);
+  const [isHoldingView, setIsHoldingView] = useState(false);
+
+  // Hide bottom navbar when in a chat on mobile
+  useEffect(() => {
+    if (selectedChat && isMobile) {
+      document.body.classList.add('hide-navbar');
+    } else {
+      document.body.classList.remove('hide-navbar');
+    }
+    return () => document.body.classList.remove('hide-navbar');
+  }, [selectedChat, isMobile]);
+
+
+  // Privacy protection: Blur on focus loss (prevents easy screenshots on mobile/desktop)
+  useEffect(() => {
+    const handleBlur = () => {
+      // Don't blur on mobile if an input is focused (keyboard opening)
+      if (isMobile && (document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA')) {
+        return;
+      }
+      setIsBlurred(true);
+    };
+    const handleFocus = () => setIsBlurred(false);
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') setIsBlurred(true);
+      else setIsBlurred(false);
+    };
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // PrintScreen, Ctrl+P, Win+Shift+S, Cmd+Shift+3/4
+      if (
+        e.key === 'PrintScreen' ||
+        (e.ctrlKey && e.key === 'p') ||
+        (e.metaKey && e.shiftKey && (e.key === 's' || e.key === 'S')) ||
+        (e.metaKey && e.shiftKey && (e.key === '3' || e.key === '4'))
+      ) {
+        setIsBlurred(true);
+        setTimeout(() => setIsBlurred(false), 2000);
+      }
+    };
+
+    window.addEventListener('blur', handleBlur);
+    window.addEventListener('focus', handleFocus);
+    window.addEventListener('mouseleave', handleBlur);
+    window.addEventListener('mouseenter', handleFocus);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyDown); // Catch PrintScreen on keyup
+
+    return () => {
+      window.removeEventListener('blur', handleBlur);
+      window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('mouseleave', handleBlur);
+      window.removeEventListener('mouseenter', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyDown);
+    };
+  }, []);
 
 
   const loadChats = useCallback(async () => {
@@ -1010,7 +1148,12 @@ const ChatPage = () => {
 
       if (targetUserId) {
         const targetIdNum = parseInt(targetUserId);
-        if (targetIdNum === user.id) return; // Can't chat with self
+
+        // Validation for non-numeric ID or missing ID
+        if (isNaN(targetIdNum) || targetIdNum === user.id) {
+          window.history.replaceState({}, '', '/chat');
+          return;
+        }
 
         // 1. Check if chat already exists
         const existingChat = chats.find(c => c.user_id === targetIdNum);
@@ -1038,7 +1181,7 @@ const ChatPage = () => {
   // Load chats on mount and when user changes
   useEffect(() => {
     if (!user && !authLoading) {
-      navigate("/login");
+      navigate("/login", { replace: true });
       return;
     }
     if (user) {
@@ -1294,7 +1437,7 @@ const ChatPage = () => {
   // Mobile: show one panel at a time
   if (isMobile) {
     return (
-      <div className="h-[calc(100vh-64px)] overflow-hidden">
+      <div className={`${selectedChat ? 'h-[100dvh]' : 'h-[calc(100dvh-64px)]'} overflow-hidden`}>
         {selectedChat ? (
           <ChatView
             selectedChat={selectedChat}
@@ -1318,6 +1461,10 @@ const ChatPage = () => {
             setPendingFile={setPendingFile}
             handleConfirmUpload={handleConfirmUpload}
             isLoading={isLoading}
+            isBlurred={isBlurred}
+            setIsBlurred={setIsBlurred}
+            isPreviewViewOnce={isPreviewViewOnce}
+            setIsPreviewViewOnce={setIsPreviewViewOnce}
           />
         ) : (
           <ConversationList
@@ -1381,6 +1528,10 @@ const ChatPage = () => {
           setPendingFile={setPendingFile}
           handleConfirmUpload={handleConfirmUpload}
           isLoading={isLoading}
+          isBlurred={isBlurred}
+          setIsBlurred={setIsBlurred}
+          isPreviewViewOnce={isPreviewViewOnce}
+          setIsPreviewViewOnce={setIsPreviewViewOnce}
         />
       </div>
     </div>

@@ -13,9 +13,9 @@ const TelegramLogin = () => {
             try {
                 const loggedInUser = await loginWithTelegram(user);
                 if (loggedInUser.role === 'admin') {
-                    navigate('/admin');
+                    navigate('/admin', { replace: true });
                 } else {
-                    navigate('/chat');
+                    navigate('/chat', { replace: true });
                 }
             } catch (err) {
                 console.error('Telegram login failed:', err);

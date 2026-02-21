@@ -41,7 +41,7 @@ const BottomNavbar = () => {
   ];
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 bg-background border-t border-border flex justify-around items-center h-16 z-50 shadow-md">
+    <nav className="fixed bottom-0 left-0 right-0 bg-background border-t border-border flex justify-around items-center h-16 z-50 shadow-md bottom-navbar">
       {navItems.filter(item => item.show).map((item) => (
         <Link
           key={item.to}

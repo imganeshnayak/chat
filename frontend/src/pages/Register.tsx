@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Send, Mail, CheckCircle2, Loader2 } from "lucide-react";
 import TelegramLogin from "@/components/TelegramLogin";
@@ -24,6 +24,7 @@ const Register = () => {
   const [error, setError] = useState("");
   const [isSendingOtp, setIsSendingOtp] = useState(false);
   const [otpSent, setOtpSent] = useState(false);
+  const { user } = useAuth();
 
   // Step 1: Send OTP to email
   const handleSendOtp = async (e: React.FormEvent) => {
@@ -58,7 +59,7 @@ const Register = () => {
     setError("");
     try {
       await register(username, email, password, displayName, otp);
-      navigate("/chat");
+      navigate("/chat", { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Registration failed");
     }

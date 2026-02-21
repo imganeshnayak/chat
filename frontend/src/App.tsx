@@ -1,4 +1,6 @@
 import { Toaster } from "@/components/ui/toaster";
+import { useAuth } from "./contexts/AuthContext";
+import LoadingScreen from "./components/ui/LoadingScreen";
 import BottomNavbar from "./components/BottomNavbar";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -17,28 +19,55 @@ import AdminChatView from "./pages/AdminChatView";
 import SettingsPage from "./pages/SettingsPage";
 import ForgotPassword from "./pages/ForgotPassword";
 import NotFound from "./pages/NotFound";
+import CookieConsent from "./components/CookieConsent";
 
 const queryClient = new QueryClient();
+
+// Protected Route component
+const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
+  const { user, isLoading } = useAuth();
+  if (isLoading) return <LoadingScreen />;
+  if (!user) return <Navigate to="/login" replace />;
+  return <>{children}</>;
+};
+
+// Admin Route component
+const AdminRoute = ({ children }: { children: React.ReactNode }) => {
+  const { user, isLoading } = useAuth();
+  if (isLoading) return <LoadingScreen />;
+  if (!user || user.role !== 'admin') return <Navigate to="/chat" replace />;
+  return <>{children}</>;
+};
+
+// Public Route component (redirects to chat if already logged in)
+const PublicRoute = ({ children }: { children: React.ReactNode }) => {
+  const { user, isLoading } = useAuth();
+  if (isLoading) return <LoadingScreen />;
+  if (user) {
+    return <Navigate to={user.role === 'admin' ? "/admin" : "/chat"} replace />;
+  }
+  return <>{children}</>;
+};
 
 const MainContent = () => {
   const location = useLocation();
   const showNavbar = !["/login", "/register", "/", "/forgot-password"].includes(location.pathname);
 
   return (
-    <div className={showNavbar ? "pb-16" : ""}>
+    <div className={`${showNavbar ? "pb-16" : ""} main-wrapper`}>
       <Routes>
         <Route path="/" element={<Landing />} />
-        <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<Register />} />
-        <Route path="/forgot-password" element={<ForgotPassword />} />
-        <Route path="/chat" element={<ChatPage />} />
-        <Route path="/profile" element={<ProfilePage />} />
-        <Route path="/profile/:userId" element={<ProfilePage />} />
-        <Route path="/escrow" element={<EscrowPage />} />
-        <Route path="/wallet" element={<WalletPage />} />
-        <Route path="/settings" element={<SettingsPage />} />
-        <Route path="/admin" element={<AdminDashboard />} />
-        <Route path="/admin/chats/:chatId" element={<AdminChatView />} />
+        <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
+        <Route path="/register" element={<PublicRoute><Register /></PublicRoute>} />
+        <Route path="/forgot-password" element={<PublicRoute><ForgotPassword /></PublicRoute>} />
+        <Route path="/chat" element={<ProtectedRoute><ChatPage /></ProtectedRoute>} />
+        <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
+        <Route path="/profile/:username" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
+        <Route path="/escrow" element={<ProtectedRoute><EscrowPage /></ProtectedRoute>} />
+        <Route path="/wallet" element={<ProtectedRoute><WalletPage /></ProtectedRoute>} />
+        <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
+        <Route path="/admin" element={<AdminRoute><AdminDashboard /></AdminRoute>} />
+        <Route path="/admin/chats/:chatId" element={<AdminRoute><AdminChatView /></AdminRoute>} />
         <Route path="*" element={<NotFound />} />
       </Routes>
       {showNavbar && <BottomNavbar />}
@@ -54,6 +83,7 @@ const App = () => (
         <Sonner />
         <BrowserRouter>
           <MainContent />
+          <CookieConsent />
         </BrowserRouter>
       </TooltipProvider>
     </AuthProvider>

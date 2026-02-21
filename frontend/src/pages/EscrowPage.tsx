@@ -66,7 +66,6 @@ const EscrowPage = () => {
         chatId,
         vendorId
       }));
-      setIsNewDealOpen(true);
     }
   }, [searchParams]);
 
@@ -343,7 +342,7 @@ const EscrowPage = () => {
                 <Plus className="mr-1 h-4 w-4" /> New Deal
               </Button>
             </DialogTrigger>
-            <DialogContent className="bg-card border-border">
+            <DialogContent className="bg-card border-border sm:max-w-[425px] w-[95vw] max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle className="text-card-foreground">Create Escrow Deal</DialogTitle>
               </DialogHeader>
@@ -514,7 +513,7 @@ const EscrowPage = () => {
                               Release Payment
                             </Button>
                           </DialogTrigger>
-                          <DialogContent className="bg-card border-border">
+                          <DialogContent className="bg-card border-border sm:max-w-[425px] w-[95vw] max-h-[90vh] overflow-y-auto">
                             <DialogHeader>
                               <DialogTitle className="text-card-foreground">Release Payment</DialogTitle>
                             </DialogHeader>

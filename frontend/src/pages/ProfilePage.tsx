@@ -7,7 +7,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { ArrowLeft, Share2, Copy, Mail, Phone, MessageSquare, Twitter, Instagram, Linkedin, Github, Globe, Plus, Trash2, ExternalLink, Star, CheckCircle2, LogOut } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { getUser, updateUserProfile, uploadAvatar, rateUser, AuthUser, applyForVerification, getVerificationStatus, getVerificationFee, VerificationRequest } from "@/lib/api";
+import { getUser, getUserByUsername, updateUserProfile, uploadAvatar, rateUser, AuthUser, applyForVerification, getVerificationStatus, getVerificationFee, VerificationRequest } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { Camera, Save, X, Edit2 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
@@ -46,7 +46,7 @@ const SocialIcon = ({ platform }: { platform: string }) => {
 };
 
 const ProfilePage = () => {
-  const { userId } = useParams();
+  const { username } = useParams();
   const { user: currentUser, isLoading: authLoading, logout } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -72,8 +72,8 @@ const ProfilePage = () => {
   const loadUser = async () => {
     setIsLoading(true);
     try {
-      if (userId) {
-        const userData = await getUser(parseInt(userId));
+      if (username) {
+        const userData = await getUserByUsername(username);
         setUser(userData);
       } else {
         const userData = await getUser(currentUser.id); // Refresh current user data
@@ -109,12 +109,12 @@ const ProfilePage = () => {
   useEffect(() => {
     if (!authLoading) {
       loadUser();
-      if (!userId) {
+      if (!username) {
         // Only load verification data for own profile
         loadVerificationData();
       }
     }
-  }, [userId, currentUser, authLoading]);
+  }, [username, currentUser, authLoading]);
 
   if (authLoading || (isLoading && !user)) return <LoadingScreen />;
 
@@ -127,7 +127,7 @@ const ProfilePage = () => {
   }
 
   const isOwnProfile = user.id === currentUser?.id;
-  const profileLink = `${window.location.origin}/profile/${user.id}`;
+  const profileLink = `${window.location.origin}/profile/${user.username}`;
 
 
   const copyLink = () => {

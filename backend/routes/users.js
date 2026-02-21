@@ -64,6 +64,49 @@ router.get('/search', auth, async (req, res) => {
     }
 });
 
+// GET /api/users/username/:username - Get user profile by username
+router.get('/username/:username', auth, async (req, res) => {
+    try {
+        const { username } = req.params;
+        const user = await prisma.user.findUnique({
+            where: { username: username },
+            select: {
+                id: true,
+                username: true,
+                email: true,
+                displayName: true,
+                bio: true,
+                avatarUrl: true,
+                socialLinks: true,
+                role: true,
+                status: true,
+                verified: true,
+                createdAt: true,
+                ratingsReceived: {
+                    select: { rating: true }
+                }
+            },
+        });
+
+        if (!user) {
+            return res.status(404).json({ error: 'User not found.' });
+        }
+
+        const ratings = user.ratingsReceived.map(r => r.rating);
+        const avgRating = ratings.length > 0 ? (ratings.reduce((a, b) => a + b, 0) / ratings.length).toFixed(1) : "0.0";
+
+        res.json({
+            ...user,
+            averageRating: parseFloat(avgRating),
+            ratingCount: ratings.length,
+            ratingsReceived: undefined
+        });
+    } catch (err) {
+        console.error('Get user by username error:', err);
+        res.status(500).json({ error: 'Server error.' });
+    }
+});
+
 // GET /api/users/:id - Get user profile with rating
 router.get('/:id', auth, async (req, res) => {
     try {

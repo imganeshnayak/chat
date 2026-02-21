@@ -61,7 +61,12 @@
     scroll-behavior: smooth;
   }
 
-  h1, h2, h3, h4, h5, h6 {
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
     font-family: 'Outfit', sans-serif;
     letter-spacing: -0.02em;
   }
@@ -70,4 +75,83 @@
     background-color: hsl(var(--primary));
     color: hsl(var(--primary-foreground));
   }
+}
+
+/* Privacy & Screenshot Protection */
+.privacy-protected {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  -moz-user-select: none !important;
+  -ms-user-select: none !important;
+  -webkit-touch-callout: none !important;
+  /* Disable long-press on iOS */
+}
+
+/* Print Protection */
+@media print {
+  body * {
+    visibility: hidden !important;
+  }
+
+  .print-hidden,
+  #root,
+  .chat-container {
+    display: none !important;
+  }
+
+  body::after {
+    content: "Screen capture and printing are disabled for privacy.";
+    visibility: visible;
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 20px;
+    font-weight: bold;
+    color: black;
+  }
+}
+
+/* Blur protection for focus loss */
+.blur-privacy {
+  filter: blur(25px) grayscale(1);
+  pointer-events: none;
+  transition: filter 0.3s ease;
+}
+
+.chat-watermark-disabled {
+  position: relative;
+}
+
+.chat-watermark-disabled::before {
+  content: attr(data-watermark);
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-content: center;
+  overflow: hidden;
+  opacity: 0.05;
+  font-size: 14px;
+  color: hsl(var(--foreground));
+  pointer-events: none;
+  z-index: 5;
+  transform: rotate(-15deg);
+  white-space: pre;
+  line-height: 8rem;
+  letter-spacing: 2rem;
+  user-select: none;
+}
+
+/* Hide navbar utility */
+.hide-navbar .bottom-navbar {
+  display: none !important;
+}
+
+.hide-navbar .main-wrapper {
+  padding-bottom: 0 !important;
 }

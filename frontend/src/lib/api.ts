@@ -102,6 +102,10 @@ export function getUser(id: number): Promise<AuthUser> {
   return apiFetch<AuthUser>(`/api/users/${id}`);
 }
 
+export function getUserByUsername(username: string): Promise<AuthUser> {
+  return apiFetch<AuthUser>(`/api/users/username/${username}`);
+}
+
 export function searchUsers(query: string): Promise<AuthUser[]> {
   return apiFetch<AuthUser[]>(`/api/users/search?q=${encodeURIComponent(query)}`);
 }
@@ -168,6 +172,7 @@ export interface Message {
   chatId: string;
   content: string;
   messageType: string;
+  message_type?: string; // Backend legacy or raw payload alias
   read: boolean;
   isDeleted?: boolean;
   isViewOnce?: boolean;
@@ -334,6 +339,8 @@ export interface AdminStats {
   totalEscrowValue: number;
   recentActivity: number;
   pendingPayouts: number;
+  pendingVerifications: number;
+  pendingReports: number;
   totalPayoutValue: number;
 }
 
