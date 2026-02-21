@@ -8,10 +8,12 @@ import { Badge } from "@/components/ui/badge";
 import {
   Search, Send, Paperclip, Smile, ArrowLeft, Image, FileText,
   Mic, MoreVertical, IndianRupee, User as UserIcon, Plus,
-  Trash2, Ban, AlertTriangle, Download, X, CheckCircle2, Loader2, LogOut, Settings, User, HelpCircle, ShieldCheck, EyeOff, Eye, Lock
+  Trash2, Ban, AlertTriangle, Download, X, CheckCircle2, Loader2, LogOut, Settings, User, HelpCircle, ShieldCheck, EyeOff, Eye, Lock, Shield
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
+import { useScreenshotProtection } from "@/hooks/useScreenshotProtection";
+import { useMobileScreenshotProtection } from "@/hooks/useMobileScreenshotProtection";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Dialog,
@@ -47,6 +49,9 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { socketService } from "@/lib/socket";
 import { getCloudinaryDownloadUrl, downloadFile } from "@/lib/cloudinary";
 import LoadingScreen from "@/components/ui/LoadingScreen";
+import { detectDevice, applyPlatformSpecificProtections } from "@/lib/mobileProtectionService";
+import { createScreenshotNotification } from "@/lib/screenshotNotification";
+import { notifyScreenshotAttempt } from "@/lib/api";
 import FilePreviewDialog from "@/components/chat/FilePreviewDialog";
 import NotificationBell from "@/components/NotificationBell";
 
@@ -393,16 +398,17 @@ const ChatView = ({
   }
 
   return (
-    <div className={`flex flex-col h-full bg-background relative overflow-hidden ${isBlurred ? 'blur-privacy' : ''}`}>
-      {/* Privacy Screen Overlay */}
-      {isBlurred && (
-        <div className="absolute inset-0 z-[100] flex items-center justify-center bg-background/80 backdrop-blur-3xl animate-in fade-in duration-300">
+    <div className={`flex flex-col h-full bg-background relative overflow-hidden ${isBlurred ? 'blur-privacy' : ''}`} data-nocontext>
+      {/* Privacy Screen Overlay - Only show when blurred and selected chat exists */}
+      {isBlurred && selectedChat && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-xl animate-in fade-in duration-200 pointer-events-auto">
           <div className="text-center p-6 scale-in-95 animate-in duration-300">
-            <div className="bg-primary/10 p-4 rounded-full w-20 h-20 flex items-center justify-center mx-auto mb-4 border border-primary/20">
-              <Lock className="h-10 w-10 text-primary" />
+            <div className="bg-destructive/10 p-4 rounded-full w-20 h-20 flex items-center justify-center mx-auto mb-4 border 2px border-destructive/30 shadow-lg">
+              <Shield className="h-10 w-10 text-destructive animate-pulse" />
             </div>
-            <h2 className="text-xl font-bold text-foreground mb-1">Privacy Protected</h2>
-            <p className="text-sm text-muted-foreground">Screen capture is restricted.</p>
+            <h2 className="text-2xl font-bold text-foreground mb-3 tracking-tight">Screenshot Detected</h2>
+            <p className="text-sm text-muted-foreground mb-2">Unauthorized screen capture attempt blocked.</p>
+            <p className="text-xs text-muted-foreground opacity-70">Your chat privacy is protected.</p>
           </div>
         </div>
       )}
@@ -481,12 +487,13 @@ const ChatView = ({
       </div>
 
       {/* Messages */}
-      <div className="flex-1 relative overflow-hidden min-h-0 bg-background">
+      <div className="flex-1 relative overflow-hidden min-h-0 bg-background" data-nocontext>
 
         <div
           className="h-full overflow-y-auto scrollbar-thin scrollbar-thumb-primary/20 scroll-smooth relative z-10"
+          data-nocontext
         >
-          <div className="px-4 pt-4 pb-2 space-y-3">
+          <div className="px-4 pt-4 pb-2 space-y-3 chat-message-container privacy-protected">
             {messages.length === 0 ? (
               <div className="text-center text-muted-foreground py-8">Start a conversation</div>
             ) : (
@@ -514,16 +521,17 @@ const ChatView = ({
                       </div>
                     )}
                     <div
-                      className={`flex ${isMine ? "justify-end" : "justify-start"} items-center gap-2 group relative ${selectedMessages.includes(msg.id) ? "bg-primary/10 -mx-4 px-4 py-1" : ""}`}
+                      className={`flex ${isMine ? "justify-end" : "justify-start"} items-center gap-2 group relative chat-message privacy-protected ${selectedMessages.includes(msg.id) ? "bg-primary/10 -mx-4 px-4 py-1" : ""}`}
                       onClick={() => handleMessageClick(msg)}
                       onTouchStart={() => onTouchStart(msg.id)}
                       onTouchEnd={onTouchEnd}
                       onContextMenu={(e) => {
+                        e.preventDefault();
                         if (isMobile) {
-                          e.preventDefault();
                           toggleMessageSelection(msg.id);
                         }
                       }}
+                      data-nocontext
                     >
                       {isSelectionMode && (
                         <div className={`absolute ${isMine ? "left-2" : "right-2"} z-10`}>
@@ -757,6 +765,7 @@ const ChatView = ({
             value={newMessage}
             onChange={(e) => setNewMessage(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleSend()}
+            data-nopaste
           />
           <Button size="icon" onClick={handleSend} className="shrink-0">
             <Send className="h-4 w-4" />
@@ -1021,8 +1030,75 @@ const ChatPage = () => {
     return () => document.body.classList.remove('hide-navbar');
   }, [selectedChat, isMobile]);
 
+  // Clear blur state when viewport changes (fixes glitch when switching mobile/desktop views)
+  useEffect(() => {
+    setIsBlurred(false);
+    document.documentElement.classList.remove('mobile-screen-blur');
+    document.documentElement.classList.remove('screenshot-attempted');
+  }, [isMobile]);
+
+  // Initialize platform-specific screenshot protections
+  useEffect(() => {
+    if (isMobile && selectedChat) {
+      const device = detectDevice();
+      applyPlatformSpecificProtections(device);
+    }
+  }, [isMobile, selectedChat]);
+
+  // Handle screenshot attempt notifications
+  const handleScreenshotAttempt = useCallback(async () => {
+    if (!selectedChat || !user) return;
+
+    // Blur the screen immediately
+    setIsBlurred(true);
+
+    try {
+      // Send notification to backend
+      const notification = await notifyScreenshotAttempt({
+        receiver_id: selectedChat.user_id,
+        chat_id: selectedChat.chat_id,
+      });
+
+      // Add visual notification to chat
+      const screenshotNotification = createScreenshotNotification(
+        user.username,
+        user.username,
+        user.displayName,
+        true // isOwnAttempt
+      );
+      
+      screenshotNotification.chatId = selectedChat.chat_id;
+      
+      setMessages((prev) => [...prev, screenshotNotification as any]);
+      
+      // Show toast alert
+      toast({
+        title: "⚠️ Screenshot Attempt Blocked",
+        description: "Your screenshot attempt has been recorded and reported.",
+        variant: "destructive",
+        duration: 5000,
+      });
+    } catch (err) {
+      console.error("Failed to notify screenshot attempt:", err);
+    } finally {
+      // Remove blur after 3 seconds (with safety timeout)
+      const blurTimeout = setTimeout(() => {
+        setIsBlurred(false);
+        document.documentElement.classList.remove('mobile-screen-blur');
+        document.documentElement.classList.remove('screenshot-attempted');
+      }, 3000);
+
+      // Cleanup timeout on component unmount or chat change
+      return () => clearTimeout(blurTimeout);
+    }
+  }, [selectedChat, user, toast]);
 
   // Privacy protection: Blur on focus loss (prevents easy screenshots on mobile/desktop)
+  useScreenshotProtection(handleScreenshotAttempt, !!selectedChat);
+
+  // Enhanced mobile screenshot protection
+  useMobileScreenshotProtection(handleScreenshotAttempt, !!selectedChat && isMobile);
+
   useEffect(() => {
     const handleBlur = () => {
       // Don't blur on mobile if an input is focused (keyboard opening)
@@ -1033,41 +1109,36 @@ const ChatPage = () => {
     };
     const handleFocus = () => setIsBlurred(false);
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'hidden') setIsBlurred(true);
-      else setIsBlurred(false);
-    };
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // PrintScreen, Ctrl+P, Win+Shift+S, Cmd+Shift+3/4
-      if (
-        e.key === 'PrintScreen' ||
-        (e.ctrlKey && e.key === 'p') ||
-        (e.metaKey && e.shiftKey && (e.key === 's' || e.key === 'S')) ||
-        (e.metaKey && e.shiftKey && (e.key === '3' || e.key === '4'))
-      ) {
+      if (document.visibilityState === 'hidden') {
         setIsBlurred(true);
-        setTimeout(() => setIsBlurred(false), 2000);
+      } else {
+        setIsBlurred(false);
       }
+    };
+    
+    // Clear blur on window resize (fixes viewport switching issue)
+    const handleResize = () => {
+      setIsBlurred(false);
+      document.documentElement.classList.remove('mobile-screen-blur');
+      document.documentElement.classList.remove('screenshot-attempted');
     };
 
     window.addEventListener('blur', handleBlur);
     window.addEventListener('focus', handleFocus);
     window.addEventListener('mouseleave', handleBlur);
     window.addEventListener('mouseenter', handleFocus);
+    window.addEventListener('resize', handleResize);
     document.addEventListener('visibilitychange', handleVisibilityChange);
-    window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('keyup', handleKeyDown); // Catch PrintScreen on keyup
 
     return () => {
       window.removeEventListener('blur', handleBlur);
       window.removeEventListener('focus', handleFocus);
       window.removeEventListener('mouseleave', handleBlur);
       window.removeEventListener('mouseenter', handleFocus);
+      window.removeEventListener('resize', handleResize);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
-      window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('keyup', handleKeyDown);
     };
-  }, []);
+  }, [isMobile]);
 
 
   const loadChats = useCallback(async () => {
@@ -1247,6 +1318,9 @@ const ChatPage = () => {
 
   // Load messages and join room when selected chat changes
   useEffect(() => {
+    // Clear blur state when changing chats
+    setIsBlurred(false);
+    
     if (selectedChat && user) {
       loadMessages(selectedChat.chat_id);
       socketService.joinChat(user.id, selectedChat.chat_id);
@@ -1272,6 +1346,28 @@ const ChatPage = () => {
     });
     return cleanup;
   }, [user, selectedChat, loadChats]);
+
+  // Handle screenshot attempt notifications from other users
+  useEffect(() => {
+    if (!user) return;
+    const cleanup = socketService.onScreenshotAttempt((data) => {
+      if (selectedChat && data.chatId === selectedChat.chat_id) {
+        // Add screenshot attempt notification to messages
+        setMessages((prev) => {
+          // Prevent duplicates
+          const isDuplicate = prev.some(m => 
+            m.messageType === 'notification' && 
+            m.content.includes('attempted to take a screenshot') &&
+            Math.abs(new Date(m.createdAt).getTime() - new Date(data.message.createdAt).getTime()) < 1000
+          );
+          
+          if (isDuplicate) return prev;
+          return [...prev, data.message];
+        });
+      }
+    });
+    return cleanup;
+  }, [user, selectedChat]);
 
   // Search users when query changes - debounce to avoid excessive searching
   useEffect(() => {

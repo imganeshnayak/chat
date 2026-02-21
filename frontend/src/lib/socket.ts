@@ -58,6 +58,12 @@ class SocketService {
         return () => { this.socket?.off("messageOpened", callback); };
     }
 
+    onScreenshotAttempt(callback: (data: { chatId: string; message: any }) => void) {
+        if (!this.socket) return;
+        this.socket.on("screenshotAttempt", callback);
+        return () => { this.socket?.off("screenshotAttempt", callback); };
+    }
+
     disconnect() {
         if (this.socket) {
             this.socket.disconnect();

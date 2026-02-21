@@ -85,6 +85,31 @@
   -ms-user-select: none !important;
   -webkit-touch-callout: none !important;
   /* Disable long-press on iOS */
+  -webkit-user-drag: none !important;
+  pointer-events: auto !important;
+}
+
+/* Prevent text selection globally on chat content */
+.chat-view,
+.chat-message {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  -moz-user-select: none !important;
+  -ms-user-select: none !important;
+}
+
+/* Protect images from being saved */
+.privacy-protected img,
+.chat-message img {
+  user-select: none !important;
+  -webkit-user-drag: none !important;
+  pointer-events: none !important;
+}
+
+/* Disable context menu */
+.privacy-protected,
+.chat-message {
+  -webkit-touch-callout: none !important;
 }
 
 /* Print Protection */
@@ -95,7 +120,8 @@
 
   .print-hidden,
   #root,
-  .chat-container {
+  .chat-container,
+  .chat-view {
     display: none !important;
   }
 
@@ -109,42 +135,88 @@
     font-size: 20px;
     font-weight: bold;
     color: black;
+    z-index: 9999;
   }
 }
 
 /* Blur protection for focus loss */
 .blur-privacy {
-  filter: blur(25px) grayscale(1);
+  filter: blur(30px) grayscale(1) brightness(0.7);
   pointer-events: none;
-  transition: filter 0.3s ease;
-}
-
-.chat-watermark-disabled {
+  transition: filter 0.2s ease;
   position: relative;
+  z-index: 99;
 }
 
-.chat-watermark-disabled::before {
-  content: attr(data-watermark);
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  align-content: center;
-  overflow: hidden;
-  opacity: 0.05;
-  font-size: 14px;
-  color: hsl(var(--foreground));
+/* Ensure overlay doesn't block on viewport change */
+.blur-privacy::after {
+  display: none;
+}
+
+/* Screenshot attempted warning */
+html.screenshot-attempted {
+  filter: blur(20px) grayscale(1);
+  animation: screenshot-block 0.3s ease-out;
+}
+
+@keyframes screenshot-block {
+  0% {
+    filter: blur(10px);
+  }
+  50% {
+    filter: blur(30px) brightness(0.5);
+  }
+  100% {
+    filter: blur(20px) grayscale(1);
+  }
+}
+
+/* Mobile screenshot protection */
+html.mobile-screen-blur {
+  filter: blur(25px) grayscale(1) brightness(0.7);
+  animation: mobile-screenshot-block 0.25s ease-out;
   pointer-events: none;
-  z-index: 5;
-  transform: rotate(-15deg);
-  white-space: pre;
-  line-height: 8rem;
-  letter-spacing: 2rem;
-  user-select: none;
+}
+
+@keyframes mobile-screenshot-block {
+  0% {
+    filter: blur(8px) brightness(0.9);
+  }
+  50% {
+    filter: blur(35px) grayscale(1) brightness(0.5);
+  }
+  100% {
+    filter: blur(25px) grayscale(1) brightness(0.7);
+  }
+}
+
+/* Automatically clear mobile blur on desktop/larger screens */
+@media (min-width: 768px) {
+  html.mobile-screen-blur {
+    filter: none !important;
+    animation: none !important;
+    pointer-events: auto !important;
+  }
+}
+
+/* Periodic blur animation for mobile */
+@keyframes periodic-blur {
+  0%, 100% {
+    filter: none;
+  }
+  20% {
+    filter: blur(2px);
+  }
+  50% {
+    filter: blur(15px) grayscale(0.5);
+  }
+  80% {
+    filter: blur(2px);
+  }
+}
+
+html.mobile-screen-blur .chat-message-container {
+  animation: periodic-blur 2.5s ease-in-out !important;
 }
 
 /* Hide navbar utility */
@@ -154,4 +226,89 @@
 
 .hide-navbar .main-wrapper {
   padding-bottom: 0 !important;
+}
+
+/* Enhanced chat message protection */
+.chat-message {
+  /* Prevent dragging */
+  -webkit-user-drag: none !important;
+  user-drag: none !important;
+  
+  /* Disable selection by default but allow interaction */
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  -moz-user-select: none !important;
+  -ms-user-select: none !important;
+  
+  /* Mobile-specific protections */
+  touch-action: manipulation !important;
+  -webkit-touch-callout: none !important;
+  -webkit-user-select: none !important;
+}
+
+/* Prevent mobile screenshot gestures */
+@media (max-width: 768px) {
+  * {
+    -webkit-user-select: none !important;
+    -webkit-user-drag: none !important;
+    -webkit-touch-callout: none !important;
+    user-select: none !important;
+  }
+  
+  /* Allow input to still be usable */
+  input, textarea, a {
+    -webkit-user-select: text !important;
+    user-select: text !important;
+  }
+  
+  .chat-message {
+    /* Extra protection for message content */
+    position: relative;
+    z-index: 10;
+    
+    /* Prevent accessibility overlays from capturing */
+    -webkit-user-select: none !important;
+    user-select: none !important;
+    -webkit-user-drag: none !important;
+  }
+  
+  /* Prevent gesture-based zoom that enables screenshot */
+  html {
+    touch-action: manipulation !important;
+    user-select: none !important;
+  }
+  
+  /* Disable pinch zoom */
+  html *:not(input):not(textarea) {
+    touch-action: manipulation !important;
+  }
+}
+
+/* Prevent copy protection on message content */
+.chat-message * {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  -moz-user-select: none !important;
+  -ms-user-select: none !important;
+}
+
+/* Protect input from pasting sensitive content */
+[data-nopaste] {
+  -webkit-user-select: text !important;
+  user-select: text !important;
+}
+
+/* Protect context menu items */
+[data-nocontext] {
+  /* This is handled by JavaScript event listeners */
+}
+
+/* Hide elements during screen recording on iOS */
+@supports (padding: max(0px)) {
+  body {
+    padding-left: max(0px, env(safe-area-inset-left));
+    padding-right: max(0px, env(safe-area-inset-right));
+    padding-top: max(0px, env(safe-area-inset-top));
+    padding-bottom: max(0px, env(safe-area-inset-bottom));
+  }
 }

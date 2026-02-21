@@ -313,6 +313,16 @@ export async function uploadFile(data: {
   return res.json();
 }
 
+export function notifyScreenshotAttempt(data: {
+  receiver_id: number;
+  chat_id: string;
+}): Promise<Message> {
+  return apiFetch<Message>("/api/messages/screenshot-attempt", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
 // ============ Admin API ============
 
 export interface ActivityLog {
