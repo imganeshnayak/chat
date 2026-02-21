@@ -105,7 +105,7 @@ const ConversationList = ({
   onLogout: () => void;
   onSupport: () => void;
 }) => (
-  <div className="flex flex-col h-full bg-background overflow-hidden">
+  <div className="flex flex-col h-full min-h-0 bg-background overflow-hidden">
     {/* Header */}
     <div className="p-4 border-b border-border sticky top-0 z-10 bg-background/95 backdrop-blur-md">
       <div className="flex items-center justify-between mb-3">
@@ -385,7 +385,7 @@ const ChatView = ({
   };
   if (!selectedChat) {
     return (
-      <div className="flex flex-col h-full items-center justify-center bg-background">
+      <div className="flex flex-col h-full min-h-0 items-center justify-center bg-background">
         <div className="text-center text-muted-foreground p-8">
           <div className="bg-secondary/30 h-24 w-24 rounded-full flex items-center justify-center mx-auto mb-6 shadow-sm">
             <Send className="h-10 w-10 text-primary opacity-40 -rotate-12" />
@@ -398,7 +398,7 @@ const ChatView = ({
   }
 
   return (
-    <div className={`flex flex-col h-full bg-background relative overflow-hidden ${isBlurred ? 'blur-privacy' : ''}`} data-nocontext>
+    <div className={`flex flex-col h-full min-h-0 bg-background relative overflow-hidden ${isBlurred ? 'blur-privacy' : ''}`} data-nocontext>
       {/* Privacy Screen Overlay - Only show when blurred and selected chat exists */}
       {isBlurred && selectedChat && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-xl animate-in fade-in duration-200 pointer-events-auto">
@@ -1030,115 +1030,35 @@ const ChatPage = () => {
     return () => document.body.classList.remove('hide-navbar');
   }, [selectedChat, isMobile]);
 
-  // Clear blur state when viewport changes (fixes glitch when switching mobile/desktop views)
+
+  // Blur when tab is hidden or window loses focus
   useEffect(() => {
-    setIsBlurred(false);
-    document.documentElement.classList.remove('mobile-screen-blur');
-    document.documentElement.classList.remove('screenshot-attempted');
-  }, [isMobile]);
-
-  // Initialize platform-specific screenshot protections
-  useEffect(() => {
-    if (isMobile && selectedChat) {
-      const device = detectDevice();
-      applyPlatformSpecificProtections(device);
-    }
-  }, [isMobile, selectedChat]);
-
-  // Handle screenshot attempt notifications
-  const handleScreenshotAttempt = useCallback(async () => {
-    if (!selectedChat || !user) return;
-
-    // Blur the screen immediately
-    setIsBlurred(true);
-
-    try {
-      // Send notification to backend
-      const notification = await notifyScreenshotAttempt({
-        receiver_id: selectedChat.user_id,
-        chat_id: selectedChat.chat_id,
-      });
-
-      // Add visual notification to chat
-      const screenshotNotification = createScreenshotNotification(
-        user.username,
-        user.username,
-        user.displayName,
-        true // isOwnAttempt
-      );
-      
-      screenshotNotification.chatId = selectedChat.chat_id;
-      
-      setMessages((prev) => [...prev, screenshotNotification as any]);
-      
-      // Show toast alert
-      toast({
-        title: "⚠️ Screenshot Attempt Blocked",
-        description: "Your screenshot attempt has been recorded and reported.",
-        variant: "destructive",
-        duration: 5000,
-      });
-    } catch (err) {
-      console.error("Failed to notify screenshot attempt:", err);
-    } finally {
-      // Remove blur after 3 seconds (with safety timeout)
-      const blurTimeout = setTimeout(() => {
-        setIsBlurred(false);
-        document.documentElement.classList.remove('mobile-screen-blur');
-        document.documentElement.classList.remove('screenshot-attempted');
-      }, 3000);
-
-      // Cleanup timeout on component unmount or chat change
-      return () => clearTimeout(blurTimeout);
-    }
-  }, [selectedChat, user, toast]);
-
-  // Privacy protection: Blur on focus loss (prevents easy screenshots on mobile/desktop)
-  useScreenshotProtection(handleScreenshotAttempt, !!selectedChat);
-
-  // Enhanced mobile screenshot protection
-  useMobileScreenshotProtection(handleScreenshotAttempt, !!selectedChat && isMobile);
-
-  useEffect(() => {
-    const handleBlur = () => {
-      // Don't blur on mobile if an input is focused (keyboard opening)
-      if (isMobile && (document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA')) {
-        return;
-      }
-      setIsBlurred(true);
+    if (!selectedChat) return;
+    const handleVisibility = () => {
+      setIsBlurred(document.hidden);
     };
+    const handleBlur = () => setIsBlurred(true);
     const handleFocus = () => setIsBlurred(false);
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'hidden') {
-        setIsBlurred(true);
-      } else {
-        setIsBlurred(false);
-      }
-    };
-    
-    // Clear blur on window resize (fixes viewport switching issue)
-    const handleResize = () => {
-      setIsBlurred(false);
-      document.documentElement.classList.remove('mobile-screen-blur');
-      document.documentElement.classList.remove('screenshot-attempted');
-    };
 
+    document.addEventListener('visibilitychange', handleVisibility);
     window.addEventListener('blur', handleBlur);
     window.addEventListener('focus', handleFocus);
-    window.addEventListener('mouseleave', handleBlur);
-    window.addEventListener('mouseenter', handleFocus);
-    window.addEventListener('resize', handleResize);
-    document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
+      document.removeEventListener('visibilitychange', handleVisibility);
       window.removeEventListener('blur', handleBlur);
       window.removeEventListener('focus', handleFocus);
-      window.removeEventListener('mouseleave', handleBlur);
-      window.removeEventListener('mouseenter', handleFocus);
-      window.removeEventListener('resize', handleResize);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [isMobile]);
+  }, [selectedChat]);
+
+  // Disable right click/context menu on chat page
+  useEffect(() => {
+    const preventContextMenu = (e: MouseEvent) => {
+      e.preventDefault();
+    };
+    document.addEventListener('contextmenu', preventContextMenu);
+    return () => document.removeEventListener('contextmenu', preventContextMenu);
+  }, []);
 
 
   const loadChats = useCallback(async () => {
@@ -1601,7 +1521,7 @@ const ChatPage = () => {
           onSupport={handleSupport}
         />
       </div>
-      <div className="flex-1 h-full overflow-hidden">
+      <div className="flex-1 h-full min-h-0 overflow-hidden">
         <ChatView
           selectedChat={selectedChat}
           setSelectedChat={setSelectedChat}

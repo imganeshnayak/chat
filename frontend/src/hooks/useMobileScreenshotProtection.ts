@@ -134,22 +134,6 @@ export const useMobileScreenshotProtection = (
     };
     document.addEventListener('keydown', volumeButtonDetected);
 
-    // Periodic blur on mobile (every 30-45 seconds) to make sustained screenshot difficult
-    let blurInterval: NodeJS.Timeout | null = null;
-    const startPeriodicBlur = () => {
-      if (blurInterval) clearInterval(blurInterval);
-      
-      blurInterval = setInterval(() => {
-        // Random blur duration between 800-1500ms
-        const duration = Math.random() * 700 + 800;
-        setMobileBlur(duration);
-      }, 35000); // Every 35 seconds
-    };
-
-    if (enabled) {
-      startPeriodicBlur();
-    }
-
     // Detect screenshot via visual registration (canvas fingerprint)
     const setupCanvasProtection = () => {
       const canvas = document.createElement('canvas');
@@ -252,10 +236,6 @@ export const useMobileScreenshotProtection = (
       document.removeEventListener('touchstart', handleGesture);
       window.removeEventListener('resize', handleZoom);
       
-      if (blurInterval) {
-        clearInterval(blurInterval);
-      }
-      
       document.documentElement.classList.remove('mobile-screen-blur');
     };
   }, [enabled, onScreenshotAttempt]);
@@ -265,11 +245,9 @@ export const useMobileScreenshotProtection = (
  * Helper function to apply blur to mobile
  */
 export const setMobileBlur = (duration: number = 3000) => {
-  document.documentElement.classList.add('mobile-screen-blur');
-  
-  setTimeout(() => {
-    if (document.documentElement.classList.contains('mobile-screen-blur')) {
-      document.documentElement.classList.remove('mobile-screen-blur');
-    }
-  }, duration);
+  // Mobile blur suppressed to avoid layout/keyboard issues on modern mobile browsers.
+  // Previously this added a 'mobile-screen-blur' class to the root element which
+  // caused viewport reflows and input focus loss on many devices. Keep as a no-op
+  // to preserve screenshot detection logic without forcing a visual blur.
+  return;
 };
