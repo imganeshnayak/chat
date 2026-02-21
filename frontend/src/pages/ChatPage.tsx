@@ -493,7 +493,12 @@ const ChatView = ({
           className="h-full overflow-y-auto scrollbar-thin scrollbar-thumb-primary/20 scroll-smooth relative z-10"
           data-nocontext
         >
-          <div className="px-4 pt-4 pb-2 space-y-3 chat-message-container privacy-protected">
+          <div
+            className="px-4 pt-4 pb-2 space-y-1 chat-message-container privacy-protected"
+            style={{
+              marginBottom: (typeof window !== 'undefined' && window.innerWidth <= 600) ? 50 : undefined
+            }}
+          >
             {messages.length === 0 ? (
               <div className="text-center text-muted-foreground py-8">Start a conversation</div>
             ) : (
@@ -728,7 +733,18 @@ const ChatView = ({
       </div>
 
       {/* Input */}
-      <div className="p-3 border-t border-border">
+      <div
+        className="p-3 border-t border-border bg-background"
+        style={{
+          position: isMobile ? 'fixed' : 'static',
+          left: 0,
+          right: 0,
+          bottom: isMobile ? 0 : 'auto',
+          zIndex: isMobile ? 50 : 'auto',
+          width: isMobile ? '100vw' : 'auto',
+          maxWidth: isMobile ? '100vw' : 'none',
+        }}
+      >
         {error && (
           <div className="text-sm text-destructive bg-destructive/10 p-2 rounded mb-2">
             {error}
@@ -1316,9 +1332,13 @@ const ChatPage = () => {
       await loadMessages(selectedChat.chat_id);
       await loadChats();
 
-      // Refocus input after sending
+      // Refocus input after sending (keep keyboard open on mobile)
       if (messageInputRef.current) {
         messageInputRef.current.focus();
+        // Scroll input into view for mobile
+        if (window.innerWidth <= 600) {
+          messageInputRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to send message");
