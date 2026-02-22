@@ -227,45 +227,49 @@ const ConversationList = ({
           <button
             key={chat.chat_id}
             onClick={() => setSelectedChat(chat)}
-            className={`w-full flex items-center gap-3 p-4 hover:bg-secondary/60 transition-colors border-b border-border ${selectedChat?.chat_id === chat.chat_id ? "bg-secondary" : ""
+            className={`w-full grid grid-cols-[48px_1fr_auto] items-center gap-3 p-4 hover:bg-secondary/60 transition-colors border-b border-border text-left overflow-hidden ${selectedChat?.chat_id === chat.chat_id ? "bg-secondary" : ""
               }`}
           >
-            <div className="relative">
-              <Avatar className="h-12 w-12">
-                <AvatarImage src={chat.avatar_url} />
-                <AvatarFallback className="bg-muted text-muted-foreground">
-                  {chat.display_name[0]}
-                </AvatarFallback>
-              </Avatar>
+            <Avatar className="h-12 w-12 shrink-0">
+              <AvatarImage src={chat.avatar_url} />
+              <AvatarFallback className="bg-muted text-muted-foreground">
+                {chat.display_name[0]}
+              </AvatarFallback>
+            </Avatar>
+
+            <div className="min-w-0 flex flex-col gap-1">
+              <div className="flex items-center gap-1.5 overflow-hidden">
+                <span className="font-semibold text-foreground text-[14px] truncate leading-tight">{chat.display_name}</span>
+                <div className="flex items-center gap-1 shrink-0">
+                  {chat.isOfficial ? (
+                    <Badge variant="secondary" className="bg-primary/10 text-primary text-[9px] h-3.5 px-1 border-none flex items-center gap-0.5">
+                      <ShieldCheck className="h-2.5 w-2.5" />
+                      OFFICIAL
+                    </Badge>
+                  ) : chat.chat_id.startsWith('support_') ? (
+                    <Badge variant="secondary" className="bg-indigo-100/80 text-indigo-700 text-[9px] h-3.5 px-1 border-none flex items-center gap-0.5 dark:bg-indigo-900/30 dark:text-indigo-400">
+                      <HelpCircle className="h-2.5 w-2.5" />
+                      SUPPORT
+                    </Badge>
+                  ) : chat.verified && (
+                    <img src="/verified-badge.svg" alt="Verified" className="h-4 w-4" />
+                  )}
+                </div>
+              </div>
+              <p className="text-[12px] text-muted-foreground truncate leading-tight w-full hover:overflow-visible">
+                {chat.last_message}
+              </p>
             </div>
-            <div className="flex-1 min-w-0 text-left pr-14 relative">
-              <div className="flex items-center gap-1.5 mb-1">
-                <span className="font-semibold text-foreground text-[14px] truncate leading-tight block">{chat.display_name}</span>
-                {chat.isOfficial ? (
-                  <Badge variant="secondary" className="bg-primary/10 text-primary text-[9px] h-3.5 px-1 border-none flex items-center gap-0.5 flex-shrink-0">
-                    <ShieldCheck className="h-2.5 w-2.5" />
-                    OFFICIAL
-                  </Badge>
-                ) : chat.chat_id.startsWith('support_') ? (
-                  <Badge variant="secondary" className="bg-indigo-100/80 text-indigo-700 text-[9px] h-3.5 px-1 border-none flex items-center gap-0.5 flex-shrink-0 dark:bg-indigo-900/30 dark:text-indigo-400">
-                    <HelpCircle className="h-2.5 w-2.5" />
-                    SUPPORT
-                  </Badge>
-                ) : chat.verified && (
-                  <img src="/verified-badge.svg" alt="Verified" className="h-4 w-4 flex-shrink-0" />
-                )}
-              </div>
-              <div className="flex items-center justify-between gap-2 overflow-hidden">
-                <p className="text-[12px] text-muted-foreground truncate flex-1 min-w-0 leading-tight">{chat.last_message}</p>
-                {chat.unread_count > 0 && (
-                  <div className="bg-primary text-primary-foreground h-4 min-w-[16px] px-1 flex items-center justify-center text-[10px] font-bold rounded-full flex-shrink-0">
-                    {chat.unread_count}
-                  </div>
-                )}
-              </div>
-              <span className="absolute right-0 top-0.5 text-[10px] text-muted-foreground font-medium whitespace-nowrap opacity-70">
+
+            <div className="flex flex-col items-end gap-2 self-start pt-0.5 shrink-0 min-w-[50px]">
+              <span className="text-[10px] text-muted-foreground font-medium whitespace-nowrap opacity-80">
                 {chat.last_message_time ? formatTime(chat.last_message_time) : ""}
               </span>
+              {chat.unread_count > 0 && (
+                <div className="bg-primary text-primary-foreground h-4 min-w-[16px] px-1 flex items-center justify-center text-[10px] font-bold rounded-full">
+                  {chat.unread_count}
+                </div>
+              )}
             </div>
           </button>
         ))

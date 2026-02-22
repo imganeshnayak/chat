@@ -597,45 +597,45 @@ const AdminDashboard = () => {
             {activeTab === "chats" && (
               <div className="space-y-3">
                 {chats.map((chat) => (
-                  <Card key={chat.chatId} className="bg-card border-border">
-                    <CardContent className="py-4 flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="flex -space-x-2">
-                          {chat.participants.map((p: any) => (
-                            <Avatar key={p.id} className="h-8 w-8 border-2 border-card">
-                              <AvatarImage src={p.avatarUrl} />
-                              <AvatarFallback>{p.displayName?.[0] || '?'}</AvatarFallback>
-                            </Avatar>
-                          ))}
-                        </div>
-                        <div className="flex-1 min-w-0 pr-16 relative">
-                          <div className="flex items-center gap-1.5 mb-1">
-                            <p className="font-semibold text-card-foreground text-sm truncate leading-tight block">
-                              {chat.participants.map((p: any) => p.displayName).join(" & ")}
-                            </p>
-                          </div>
-                          <p className="text-[11px] text-muted-foreground truncate opacity-80 leading-tight">
-                            {chat.lastMessage || `${chat.messageCount} messages`}
-                          </p>
-                          {chat.lastMessageAt && (
-                            <span className="absolute right-0 top-0 text-[10px] text-muted-foreground font-medium whitespace-nowrap opacity-70">
-                              {(() => {
-                                const d = new Date(chat.lastMessageAt);
-                                let h = d.getHours();
-                                const m = d.getMinutes();
-                                const ap = h >= 12 ? 'PM' : 'AM';
-                                h = h % 12 || 12;
-                                return `${h}:${m < 10 ? '0' + m : m} ${ap}`;
-                              })()}
-                            </span>
-                          )}
-                        </div>
+                  <Card key={chat.chatId} className="bg-card border-border overflow-hidden">
+                    <CardContent className="p-4 grid grid-cols-[auto_1fr_auto] items-center gap-4">
+                      <div className="flex -space-x-3 overflow-hidden shrink-0">
+                        {chat.participants.map((p: any) => (
+                          <Avatar key={p.id} className="h-10 w-10 border-2 border-card shadow-sm">
+                            <AvatarImage src={p.avatarUrl} />
+                            <AvatarFallback className="bg-muted text-card-foreground text-xs">
+                              {p.displayName?.[0] || '?'}
+                            </AvatarFallback>
+                          </Avatar>
+                        ))}
                       </div>
-                      <div className="flex gap-1">
+
+                      <div className="min-w-0 flex flex-col gap-1">
+                        <p className="font-semibold text-card-foreground text-sm truncate leading-tight">
+                          {chat.participants.map((p: any) => p.displayName).join(" & ")}
+                        </p>
+                        <p className="text-[12px] text-muted-foreground truncate opacity-80 leading-tight">
+                          {chat.lastMessage || `${chat.messageCount} messages`}
+                        </p>
+                      </div>
+
+                      <div className="flex flex-col items-end gap-2 shrink-0 min-w-[60px]">
+                        {chat.lastMessageAt && (
+                          <span className="text-[10px] text-muted-foreground font-medium whitespace-nowrap opacity-70">
+                            {(() => {
+                              const d = new Date(chat.lastMessageAt);
+                              let h = d.getHours();
+                              const m = d.getMinutes();
+                              const ap = h >= 12 ? 'PM' : 'AM';
+                              h = h % 12 || 12;
+                              return `${h}:${m < 10 ? '0' + m : m} ${ap}`;
+                            })()}
+                          </span>
+                        )}
                         <Button
-                          variant="ghost"
-                          size="icon"
-                          title="Open in Chat"
+                          variant="secondary"
+                          size="sm"
+                          className="h-8 w-8 p-0"
                           onClick={() => navigate(`/admin/chats/${chat.chatId}`)}
                         >
                           <MessageSquare className="h-4 w-4" />
