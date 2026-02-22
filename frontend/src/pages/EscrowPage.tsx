@@ -97,6 +97,7 @@ const EscrowPage = () => {
   };
 
   const handlePayForDeal = async (deal: EscrowDeal) => {
+    if (isCreating) return;
     if (deal.paymentStatus === 'paid') {
       toast({
         title: "Already Paid",
@@ -167,6 +168,7 @@ const EscrowPage = () => {
   };
 
   const handleCreateDeal = async () => {
+    if (isCreating) return;
     if (!newDeal.chatId || !newDeal.vendorId || !newDeal.title || !newDeal.totalAmount) {
       toast({
         title: "Missing fields",
@@ -286,6 +288,7 @@ const EscrowPage = () => {
   };
 
   const handleRelease = async (dealId: number) => {
+    if (isReleasing) return;
     const pct = parseFloat(releasePercent);
     if (!pct || pct < 1 || pct > 100) {
       toast({

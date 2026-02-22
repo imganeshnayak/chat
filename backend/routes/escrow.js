@@ -123,6 +123,24 @@ router.post('/', auth, async (req, res) => {
             return res.status(400).json({ error: 'Cannot create escrow deal with yourself.' });
         }
 
+        // Prevent duplicate submissions (Check if an identical deal was created in the last 10 seconds)
+        const recentDuplicate = await prisma.escrowDeal.findFirst({
+            where: {
+                chatId,
+                clientId: req.user.id,
+                vendorId: requestedVendorId,
+                title,
+                totalAmount: parseFloat(totalAmount),
+                createdAt: {
+                    gte: new Date(Date.now() - 10000) // 10 seconds ago
+                }
+            }
+        });
+
+        if (recentDuplicate) {
+            return res.status(409).json({ error: 'A similar deal was recently created. Please wait a moment.' });
+        }
+
         const deal = await prisma.escrowDeal.create({
             data: {
                 chatId,
@@ -172,6 +190,7 @@ router.post('/', auth, async (req, res) => {
             sender_username: systemMessage.sender.username,
         };
 
+        const io = req.app.get('io');
         if (io) {
             io.to(chatId).emit('newMessage', socketResult);
             // Also notify receiver's personal room
