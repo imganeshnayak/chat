@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { Bell, X, CheckCheck, Info, AlertTriangle, CheckCircle, AlertCircle, Trash2 } from "lucide-react";
 import { getNotifications, markNotificationRead, markAllNotificationsRead, deleteNotification, Notification } from "@/lib/api";
 import { toast } from "sonner";
@@ -33,6 +34,7 @@ function timeAgo(dateStr: string) {
 
 export default function NotificationBell() {
     const { user, token } = useAuth();
+    const navigate = useNavigate();
     const [open, setOpen] = useState(false);
     const [notifications, setNotifications] = useState<Notification[]>([]);
 
@@ -89,6 +91,27 @@ export default function NotificationBell() {
         } catch (err) {
             console.error("Failed to mark notification as read:", err);
         }
+    };
+
+    const handleNotificationClick = async (n: Notification) => {
+        if (!n.isRead) {
+            await handleMarkRead(n.id);
+        }
+
+        // Handle redirection based on metadata
+        if (n.metadata) {
+            const meta = typeof n.metadata === 'string' ? JSON.parse(n.metadata) : n.metadata;
+
+            if (meta.type === 'escrow') {
+                navigate(`/escrow?id=${meta.dealId}${meta.chatId ? `&chatId=${meta.chatId}` : ''}`);
+            } else if (meta.type === 'wallet') {
+                navigate('/wallet');
+            } else if (meta.type === 'chat' || meta.chatId) {
+                navigate(`/chat?id=${meta.chatId}`);
+            }
+        }
+
+        setOpen(false); // Close dialog
     };
 
     const handleMarkAllRead = async () => {
@@ -198,7 +221,7 @@ export default function NotificationBell() {
                                         </button>
 
                                         {/* Content */}
-                                        <div className="flex-1 min-w-0 cursor-pointer" onClick={() => handleMarkRead(n.id)}>
+                                        <div className="flex-1 min-w-0 cursor-pointer" onClick={() => handleNotificationClick(n)}>
                                             <div className="flex items-start justify-between gap-3">
                                                 <p className={`text-sm font-bold leading-tight ${n.isRead ? "text-white/60" : "text-white"}`}>
                                                     {n.title}

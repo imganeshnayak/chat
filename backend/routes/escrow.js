@@ -9,13 +9,19 @@ const router = express.Router();
 // GET /api/escrow - Get all escrow deals for current user
 router.get('/', auth, async (req, res) => {
     try {
-        const deals = await prisma.escrowDeal.findMany({
-            where: {
+        const { chatId } = req.query;
+        const where = {
+            ...(chatId && { chatId }),
+            ...(req.user.role !== 'admin' && {
                 OR: [
                     { clientId: req.user.id },
                     { vendorId: req.user.id }
                 ]
-            },
+            })
+        };
+
+        const deals = await prisma.escrowDeal.findMany({
+            where,
             include: {
                 client: {
                     select: { id: true, displayName: true, avatarUrl: true, username: true }
@@ -60,7 +66,7 @@ router.get('/:id', auth, async (req, res) => {
         }
 
         // Check if user is part of this deal
-        if (deal.clientId !== req.user.id && deal.vendorId !== req.user.id) {
+        if (req.user.role !== 'admin' && deal.clientId !== req.user.id && deal.vendorId !== req.user.id) {
             return res.status(403).json({ error: 'Not authorized.' });
         }
 
@@ -141,63 +147,113 @@ router.post('/', auth, async (req, res) => {
             return res.status(409).json({ error: 'A similar deal was recently created. Please wait a moment.' });
         }
 
-        const deal = await prisma.escrowDeal.create({
-            data: {
-                chatId,
-                clientId: req.user.id,
-                vendorId: requestedVendorId,
-                title,
-                description: description || '',
-                terms: terms || '',
-                totalAmount: parseFloat(totalAmount),
-                status: 'pending_payment'
-            },
-            include: {
-                client: {
-                    select: { id: true, displayName: true, avatarUrl: true, username: true }
-                },
-                vendor: {
-                    select: { id: true, displayName: true, avatarUrl: true, username: true }
-                },
-                transactions: true
-            }
+        // Check user balance
+        const user = await prisma.user.findUnique({
+            where: { id: req.user.id },
+            select: { walletBalance: true }
         });
 
-        await prisma.activityLog.create({
-            data: { userId: req.user.id, action: 'Created escrow deal', details: title }
-        });
+        const amountToDeduct = parseFloat(totalAmount);
+        if (user.walletBalance < amountToDeduct) {
+            return res.status(400).json({ error: `Insufficient wallet balance. You need ₹${amountToDeduct.toLocaleString('en-IN')} but only have ₹${user.walletBalance.toLocaleString('en-IN')}. Please add money to your wallet.` });
+        }
 
-        // Create a system message in the chat
-        const systemMessage = await prisma.message.create({
-            data: {
-                senderId: currentUserId,
-                receiverId: requestedVendorId,
-                chatId,
-                content: `📋 New Escrow Deal: "${title}" for ₹${parseFloat(totalAmount).toLocaleString('en-IN')}. Awaiting payment.`,
-                messageType: 'escrow_created'
-            },
-            include: {
-                sender: {
-                    select: { displayName: true, avatarUrl: true, username: true }
+        const result = await prisma.$transaction(async (tx) => {
+            // 1. Deduct from wallet
+            const updatedUser = await tx.user.update({
+                where: { id: req.user.id },
+                data: { walletBalance: { decrement: amountToDeduct } }
+            });
+
+            // 2. Log wallet transaction
+            await tx.walletTransaction.create({
+                data: {
+                    userId: req.user.id,
+                    type: 'debit',
+                    amount: -amountToDeduct,
+                    balance: updatedUser.walletBalance,
+                    description: `Escrow creation: ${title}`,
+                    reference: chatId,
+                    metadata: {
+                        dealTitle: title,
+                        chatId,
+                        vendorId: requestedVendorId,
+                        otherUserId: requestedVendorId,
+                        otherDisplayName: vendor.displayName
+                    }
                 }
-            }
-        });
+            });
 
-        const socketResult = {
-            ...systemMessage,
-            sender_name: systemMessage.sender.displayName,
-            sender_avatar: systemMessage.sender.avatarUrl,
-            sender_username: systemMessage.sender.username,
-        };
+            // 3. Create active escrow deal
+            const newDeal = await tx.escrowDeal.create({
+                data: {
+                    chatId,
+                    clientId: req.user.id,
+                    vendorId: requestedVendorId,
+                    title,
+                    description: description || '',
+                    terms: terms || '',
+                    totalAmount: amountToDeduct,
+                    status: 'active',
+                    paymentStatus: 'paid',
+                    paidAmount: amountToDeduct
+                },
+                include: {
+                    client: {
+                        select: { id: true, displayName: true, avatarUrl: true, username: true }
+                    },
+                    vendor: {
+                        select: { id: true, displayName: true, avatarUrl: true, username: true }
+                    },
+                    transactions: true
+                }
+            });
+
+            // 4. Activity Log
+            await tx.activityLog.create({
+                data: {
+                    userId: req.user.id,
+                    action: 'Created escrow deal (Wallet)',
+                    details: `${title} - ₹${amountToDeduct}`
+                }
+            });
+
+            // 5. System Message
+            const systemMsg = await tx.message.create({
+                data: {
+                    senderId: currentUserId,
+                    receiverId: requestedVendorId,
+                    chatId,
+                    content: `📋 New Escrow Deal: "${title}" for ₹${amountToDeduct.toLocaleString('en-IN')}. Funds deducted from client wallet and held in escrow.`,
+                    messageType: 'escrow_created'
+                },
+                include: {
+                    sender: {
+                        select: { displayName: true, avatarUrl: true, username: true }
+                    }
+                }
+            });
+
+            return { newDeal, systemMsg };
+        });
 
         const io = req.app.get('io');
         if (io) {
+            const socketResult = {
+                ...result.systemMsg,
+                sender_name: result.systemMsg.sender.displayName,
+                sender_avatar: result.systemMsg.sender.avatarUrl,
+                sender_username: result.systemMsg.sender.username,
+            };
             io.to(chatId).emit('newMessage', socketResult);
-            // Also notify receiver's personal room
             io.to(`user_${requestedVendorId}`).emit('newMessage', socketResult);
+
+            // Also emit escrowUpdate
+            io.to(chatId).emit('escrowUpdate', result.newDeal);
+            io.to(`user_${requestedVendorId}`).emit('escrowUpdate', result.newDeal);
         }
 
-        res.status(201).json(deal);
+        res.status(201).json(result.newDeal);
     } catch (err) {
         console.error('Create escrow deal error:', err);
         res.status(500).json({ error: 'Server error.' });
@@ -215,7 +271,11 @@ router.post('/:id/release', auth, async (req, res) => {
         }
 
         const deal = await prisma.escrowDeal.findUnique({
-            where: { id: dealId }
+            where: { id: dealId },
+            include: {
+                client: { select: { id: true, displayName: true, username: true } },
+                vendor: { select: { id: true, displayName: true, username: true } }
+            }
         });
 
         if (!deal) {
@@ -232,12 +292,15 @@ router.post('/:id/release', auth, async (req, res) => {
             return res.status(400).json({ error: 'Deal is not active.' });
         }
 
-        // Perform updates in a transaction
+        // PERFORM updates in a transaction
         // Use an atomic update first to ensure we don't exceed 100%
-        // Using updateMany allows us to conditionally fail if releasedPercent + percent > 100
         const io = req.app.get('io');
-        let updatedDeal, vendorAmount;
-        const platformFee = 0; // Assuming 0 for now as per previous logic, or calculate if needed
+        let updatedDeal, vendorNet;
+
+        // Fetch platform fee from settings
+        let platformFeePercent = 0.10; // Default
+        const feeSetting = await prisma.systemSetting.findUnique({ where: { key: 'platform_fee_percent' } });
+        if (feeSetting) platformFeePercent = parseFloat(feeSetting.value);
 
         try {
             // Re-think: updateMany doesn't return the updated record.
@@ -268,22 +331,21 @@ router.post('/:id/release', auth, async (req, res) => {
                     throw new Error('Release failed. Either deal is inactive or amount exceeds 100%.');
                 }
 
-                // 2. Fetch the updated deal to get new values and calculate amounts
-                // This is safe now because we successfully incremented.
-                const currentDeal = await tx.escrowDeal.findUnique({
-                    where: { id: dealId }
-                });
+                // Calculate amounts
+                // Re-fetch deal inside transaction to ensure we have latest data for calculations
+                const currentDeal = await tx.escrowDeal.findUnique({ where: { id: dealId } });
 
-                // Calculate amounts based on the deal's total (vendorAmount logic was missing in previous snippet!)
-                vendorAmount = (currentDeal.totalAmount * userPercent) / 100;
+                const grossAmount = (currentDeal.totalAmount * userPercent) / 100;
+                const feeAmount = grossAmount * platformFeePercent;
+                vendorNet = grossAmount - feeAmount;
 
                 // 3. Create escrow transaction record
                 await tx.escrowTransaction.create({
                     data: {
                         dealId,
                         percent: userPercent,
-                        amount: vendorAmount, // Logic assumption: amount refers to currency value released
-                        note: note || 'Payment released'
+                        amount: vendorNet,
+                        note: note || `Payment released (Platform fee: ₹${feeAmount.toLocaleString('en-IN')})`
                     }
                 });
 
@@ -299,7 +361,7 @@ router.post('/:id/release', auth, async (req, res) => {
                 // 5. Credit vendor wallet
                 const venUp = await tx.user.update({
                     where: { id: deal.vendorId },
-                    data: { walletBalance: { increment: vendorAmount } }
+                    data: { walletBalance: { increment: vendorNet } }
                 });
 
                 // 6. Log wallet transaction for vendor
@@ -307,10 +369,18 @@ router.post('/:id/release', auth, async (req, res) => {
                     data: {
                         userId: deal.vendorId,
                         type: 'escrow_release',
-                        amount: vendorAmount,
+                        amount: vendorNet,
                         balance: venUp.walletBalance,
                         reference: `deal_${dealId}`,
-                        description: `Escrow release: ${deal.title} (${userPercent}%)`
+                        description: `Escrow release: ${deal.title} (${userPercent}%). Note: ${(platformFeePercent * 100).toFixed(0)}% fee deducted.`,
+                        metadata: {
+                            dealId,
+                            dealTitle: deal.title,
+                            chatId: deal.chatId,
+                            percent: userPercent,
+                            otherUserId: deal.clientId,
+                            otherDisplayName: deal.client.displayName
+                        }
                     }
                 });
 
@@ -329,7 +399,7 @@ router.post('/:id/release', auth, async (req, res) => {
                         senderId: req.user.id,
                         receiverId: deal.vendorId,
                         chatId: deal.chatId,
-                        content: `💰 Funds Released: ₹${vendorAmount.toLocaleString('en-IN')} (${userPercent}%) for "${deal.title}".`,
+                        content: `💰 Funds Released: Net ₹${vendorNet.toLocaleString('en-IN')} (${userPercent}%) released to vendor for "${deal.title}". (Platform fee: ₹${feeAmount.toLocaleString('en-IN')})`,
                         messageType: 'escrow_released'
                     },
                     include: {
@@ -372,10 +442,10 @@ router.post('/:id/release', auth, async (req, res) => {
             io,
             deal.vendorId,
             '💰 Payment Released',
-            `You received ₹${vendorAmount.toLocaleString('en-IN')} (${percent}%) from "${deal.title}".`,
-            'success'
+            `You received ₹${vendorNet.toLocaleString('en-IN')} after platform fee from "${deal.title}".`,
+            'success',
+            { type: 'wallet', dealId, chatId: deal.chatId }
         );
-
         // If deal is completed, notify both parties
         if (updatedDeal.releasedPercent >= 100) {
             sendUserNotification(
@@ -383,22 +453,22 @@ router.post('/:id/release', auth, async (req, res) => {
                 deal.clientId,
                 '✅ Deal Completed',
                 `Your escrow deal "${deal.title}" is now fully completed. All payments have been released.`,
-                'success'
+                'success',
+                { type: 'escrow', dealId, chatId: deal.chatId }
             );
             sendUserNotification(
                 io,
                 deal.vendorId,
                 '✅ Deal Completed',
                 `The escrow deal "${deal.title}" is now fully completed. All payments have been received.`,
-                'success'
+                'success',
+                { type: 'escrow', dealId, chatId: deal.chatId }
             );
         }
 
         res.json(updatedDeal);
-
     } catch (err) {
         console.error('Release escrow error:', err);
-        // Security: Don't leak internal error messages
         res.status(500).json({ error: 'Failed to release escrow payment.' });
     }
 });
@@ -452,7 +522,7 @@ router.put('/:id', auth, async (req, res) => {
     }
 });
 
-// DELETE /api/escrow/:id - Delete unpaid escrow deal
+// DELETE /api/escrow/:id - Delete or Cancel/Refund escrow deal
 router.delete('/:id', auth, async (req, res) => {
     try {
         const dealId = parseInt(req.params.id);
@@ -465,23 +535,97 @@ router.delete('/:id', auth, async (req, res) => {
             return res.status(404).json({ error: 'Deal not found' });
         }
 
-        // Only the client can delete
+        // Only the client can delete/cancel their own deal
         if (deal.clientId !== req.user.id) {
-            return res.status(403).json({ error: 'Only the client can delete this deal' });
+            return res.status(403).json({ error: 'Only the client can cancel this deal' });
         }
 
-        // Only allow deletion of unpaid deals
-        if (deal.paymentStatus === 'paid') {
-            return res.status(400).json({ error: 'Cannot delete a paid deal' });
+        // Handle Unpaid Deals (Delete)
+        if (deal.paymentStatus !== 'paid') {
+            await prisma.escrowDeal.delete({
+                where: { id: dealId }
+            });
+            return res.json({ success: true, message: 'Deal deleted successfully' });
         }
 
-        await prisma.escrowDeal.delete({
-            where: { id: dealId }
+        // Handle Paid Deals (Refund & Cancel)
+        if (deal.status === 'completed' || deal.status === 'cancelled') {
+            return res.status(400).json({ error: 'Cannot cancel a completed or already cancelled deal.' });
+        }
+
+        const refundableAmount = deal.totalAmount * (1 - (deal.releasedPercent / 100));
+        const io = req.app.get('io');
+
+        await prisma.$transaction(async (tx) => {
+            // 1. Credit client wallet
+            const updatedClient = await tx.user.update({
+                where: { id: req.user.id },
+                data: { walletBalance: { increment: refundableAmount } }
+            });
+
+            // 2. Log wallet transaction
+            await tx.walletTransaction.create({
+                data: {
+                    userId: req.user.id,
+                    type: 'credit',
+                    amount: refundableAmount,
+                    balance: updatedClient.walletBalance,
+                    reference: `refund_deal_${dealId}`,
+                    description: `Refund for cancelled escrow deal: ${deal.title}`
+                }
+            });
+
+            // 3. Update deal status
+            await tx.escrowDeal.update({
+                where: { id: dealId },
+                data: { status: 'cancelled' }
+            });
+
+            // 4. Log activity
+            await tx.activityLog.create({
+                data: {
+                    userId: req.user.id,
+                    action: 'Cancelled escrow deal & requested refund',
+                    details: `${deal.title} - Refunded ₹${refundableAmount.toLocaleString('en-IN')}`
+                }
+            });
+
+            // 5. Create a system message in the chat
+            const systemMessage = await tx.message.create({
+                data: {
+                    senderId: req.user.id,
+                    receiverId: deal.vendorId,
+                    chatId: deal.chatId,
+                    content: `❌ Escrow Cancelled & Refunded: The deal "${deal.title}" was cancelled by the client. ₹${refundableAmount.toLocaleString('en-IN')} has been returned to the client's wallet.`,
+                    messageType: 'escrow_cancelled'
+                },
+                include: {
+                    sender: {
+                        select: { displayName: true, avatarUrl: true, username: true }
+                    }
+                }
+            });
+
+            if (io) {
+                const socketResult = {
+                    ...systemMessage,
+                    sender_name: systemMessage.sender.displayName,
+                    sender_avatar: systemMessage.sender.avatarUrl,
+                    sender_username: systemMessage.sender.username,
+                };
+                io.to(deal.chatId).emit('newMessage', socketResult);
+                io.to(`user_${deal.vendorId}`).emit('newMessage', socketResult);
+                io.to(`user_${deal.clientId}`).emit('newMessage', socketResult);
+            }
         });
 
-        res.json({ success: true, message: 'Deal deleted successfully' });
+        // Notifications
+        sendUserNotification(io, deal.clientId, '💰 Refund Processed', `₹${refundableAmount.toLocaleString('en-IN')} has been returned to your wallet for the deal "${deal.title}".`, 'success', { type: 'wallet' });
+        sendUserNotification(io, deal.vendorId, '❌ Deal Cancelled', `The escrow deal "${deal.title}" was cancelled by the client. Any unreleased funds have been refunded.`, 'alert', { type: 'escrow', dealId, chatId: deal.chatId });
+
+        res.json({ success: true, message: 'Deal cancelled and funds refunded successfully.' });
     } catch (err) {
-        console.error('Delete escrow deal error:', err);
+        console.error('Cancel escrow deal error:', err);
         res.status(500).json({ error: 'Server error.' });
     }
 });

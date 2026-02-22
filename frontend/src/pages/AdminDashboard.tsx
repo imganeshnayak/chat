@@ -890,7 +890,9 @@ const AdminDashboard = () => {
                               </Badge>
                             </div>
                             <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                              <span>Requested by <b>{payout.user?.displayName}</b></span>
+                              <span>Requested by <b>{payout.user?.displayName}</b> (@{payout.user?.username})</span>
+                              <span>•</span>
+                              <span className="text-primary/80">{payout.user?.phoneNumber || "No phone"}</span>
                               <span>•</span>
                               <span>{new Date(payout.requestedAt).toLocaleDateString()}</span>
                             </div>
@@ -917,6 +919,21 @@ const AdminDashboard = () => {
 
                                 <span className="text-muted-foreground">Account Name:</span>
                                 <span className="font-medium">{payout.accountName}</span>
+
+                                <span className="text-muted-foreground font-semibold">User Details:</span>
+                                <div className="flex flex-col">
+                                  <span className="font-medium">{payout.user?.displayName}</span>
+                                  <span className="text-xs text-muted-foreground">@{payout.user?.username}</span>
+                                  <span className="text-xs text-muted-foreground">{payout.user?.email}</span>
+                                  <span className="text-xs text-primary/80">{payout.user?.phoneNumber || "No registered phone"}</span>
+                                </div>
+
+                                {payout.adminNote && (
+                                  <>
+                                    <span className="text-muted-foreground font-semibold">Contact Provided:</span>
+                                    <span className="text-blue-500 font-bold bg-blue-500/5 p-1 rounded">{payout.adminNote}</span>
+                                  </>
+                                )}
                               </div>
                             </div>
                           </div>

@@ -42,7 +42,8 @@ router.get('/', auth, async (req, res) => {
             type: n.type,
             createdAt: n.createdAt,
             sentBy: n.admin?.displayName || n.admin?.username || 'System',
-            isRead: n.reads.length > 0 && !n.reads[0].isDeleted // Ensure we don't count deleted as just read (though filtered out anyway)
+            isRead: n.reads.length > 0 && !n.reads[0].isDeleted,
+            metadata: n.metadata
         }));
 
         res.json(result);
@@ -199,7 +200,8 @@ router.post('/broadcast', auth, adminOnly, async (req, res) => {
                 message: message.trim(),
                 type,
                 color,
-                sentBy: req.user.id
+                sentBy: req.user.id,
+                metadata: req.body.metadata // Capture metadata from body
             },
             include: {
                 admin: { select: { displayName: true, username: true } }
@@ -218,7 +220,8 @@ router.post('/broadcast', auth, adminOnly, async (req, res) => {
                 createdAt: notification.createdAt,
                 sentBy: notification.admin?.displayName || notification.admin?.username || 'Admin',
                 sentById: req.user.id, // Include sender ID for filtering
-                isRead: false
+                isRead: false,
+                metadata: notification.metadata
             });
         }
 
@@ -280,8 +283,9 @@ router.post('/broadcast', auth, adminOnly, async (req, res) => {
  * @param {string} title - Notification title
  * @param {string} message - Notification message
  * @param {'info'|'success'|'warning'|'alert'} type - Notification type
+ * @param {object|null} metadata - Extra redirection data
  */
-export async function sendUserNotification(io, targetUserId, title, message, type = 'info') {
+export async function sendUserNotification(io, targetUserId, title, message, type = 'info', metadata = null) {
     try {
         const notification = await prisma.notification.create({
             data: {
@@ -289,6 +293,7 @@ export async function sendUserNotification(io, targetUserId, title, message, typ
                 message,
                 type,
                 targetUserId,
+                metadata: metadata ? (typeof metadata === 'string' ? JSON.parse(metadata) : metadata) : null
             }
         });
 
@@ -301,7 +306,8 @@ export async function sendUserNotification(io, targetUserId, title, message, typ
                 type: notification.type,
                 createdAt: notification.createdAt,
                 sentBy: 'System',
-                isRead: false
+                isRead: false,
+                metadata: notification.metadata
             });
         }
 

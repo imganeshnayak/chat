@@ -79,6 +79,50 @@ router.post('/escrow/initiate', auth, async (req, res) => {
     }
 });
 
+// POST /api/payments/wallet/initiate - Create Razorpay order for wallet top-up
+router.post('/wallet/initiate', auth, async (req, res) => {
+    try {
+        const { amount } = req.body;
+
+        if (!amount || amount < 1) {
+            return res.status(400).json({ error: 'Minimum amount is ₹1' });
+        }
+
+        // Create Razorpay order
+        const order = await createOrder(
+            amount,
+            'INR',
+            {
+                type: 'wallet',
+                userId: req.user.id
+            }
+        );
+
+        // Log payment creation
+        await prisma.paymentLog.create({
+            data: {
+                type: 'wallet',
+                entityId: req.user.id,
+                razorpayOrderId: order.id,
+                amount: parseFloat(amount),
+                currency: 'INR',
+                status: 'created',
+                metadata: { orderId: order.id }
+            }
+        });
+
+        res.json({
+            orderId: order.id,
+            amount: order.amount, // in paise
+            currency: order.currency,
+            key_id: process.env.RAZORPAY_KEY_ID
+        });
+    } catch (err) {
+        console.error('Initiate wallet payment error:', err);
+        res.status(500).json({ error: 'Failed to initiate wallet top-up.' });
+    }
+});
+
 router.post('/verification/initiate', auth, async (req, res) => {
     try {
         let VERIFICATION_FEE = 109; // Default
@@ -188,7 +232,6 @@ router.post('/verify', auth, async (req, res) => {
         }
 
         // Check if this payment has already been processed (prevent duplicates)
-        // We use a transaction and attempt to create the log first to ensure atomicity
         try {
             await prisma.$transaction(async (tx) => {
                 const numericEntityId = parseInt(entityId);
@@ -205,11 +248,13 @@ router.post('/verify', auth, async (req, res) => {
                     if (!verificationRequest) throw new Error('Verification request not found');
                     if (verificationRequest.userId !== req.user.id) throw new Error('Unauthorized');
                     amount = verificationRequest.paymentAmount;
+                } else if (type === 'wallet') {
+                    amount = parseFloat(payment.amount) / 100; // In INR
                 } else {
                     throw new Error('Invalid payment type');
                 }
 
-                // 2. Create the PaymentLog (this will fail if razorpayPaymentId is already registered)
+                // 2. Create the PaymentLog
                 await tx.paymentLog.create({
                     data: {
                         type,
@@ -244,12 +289,10 @@ router.post('/verify', auth, async (req, res) => {
                         }
                     });
 
-                    // Send notifications
                     const io = req.app.get('io');
-                    sendUserNotification(io, req.user.id, '✅ Payment Successful', `Your payment of ₹${deal.totalAmount.toLocaleString('en-IN')} for "${deal.title}" was successful. The deal is now active.`, 'success');
-                    sendUserNotification(io, deal.vendorId, '💰 Payment Received', `A client paid ₹${deal.totalAmount.toLocaleString('en-IN')} for the deal "${deal.title}". You can now start the work.`, 'success');
+                    sendUserNotification(io, req.user.id, '✅ Payment Successful', `Your payment of ₹${deal.totalAmount.toLocaleString('en-IN')} for "${deal.title}" was successful.`, 'success', { type: 'escrow', dealId: deal.id, chatId: deal.chatId });
+                    sendUserNotification(io, deal.vendorId, '💰 Payment Received', `A client paid ₹${deal.totalAmount.toLocaleString('en-IN')} for the deal "${deal.title}".`, 'success', { type: 'escrow', dealId: deal.id, chatId: deal.chatId });
 
-                    // Create a system message in the chat
                     const systemMessage = await tx.message.create({
                         data: {
                             senderId: req.user.id,
@@ -258,11 +301,7 @@ router.post('/verify', auth, async (req, res) => {
                             content: `✅ Escrow Payment Confirmed: ₹${deal.totalAmount.toLocaleString('en-IN')} for "${deal.title}". The deal is now active.`,
                             messageType: 'escrow_payment'
                         },
-                        include: {
-                            sender: {
-                                select: { displayName: true, avatarUrl: true, username: true }
-                            }
-                        }
+                        include: { sender: { select: { displayName: true, avatarUrl: true, username: true } } }
                     });
 
                     if (io) {
@@ -273,12 +312,10 @@ router.post('/verify', auth, async (req, res) => {
                             sender_username: systemMessage.sender.username,
                         };
                         io.to(deal.chatId).emit('newMessage', socketResult);
-                        // Also notify receiver's personal room
                         io.to(`user_${deal.vendorId}`).emit('newMessage', socketResult);
                     }
 
                 } else if (type === 'verification') {
-                    const verificationRequest = await tx.verificationRequest.findUnique({ where: { id: numericEntityId } });
                     await tx.verificationRequest.update({
                         where: { id: numericEntityId },
                         data: {
@@ -292,27 +329,46 @@ router.post('/verify', auth, async (req, res) => {
                         data: {
                             userId: req.user.id,
                             action: 'Paid for verification',
-                            details: `₹${verificationRequest.paymentAmount}`
+                            details: `₹${amount}`
                         }
                     });
 
                     const io = req.app.get('io');
-                    sendUserNotification(io, req.user.id, '🛡️ Verification Payment Received', `We received your payment for verification. Our team will review your account shortly.`, 'success');
+                    sendUserNotification(io, req.user.id, '🛡️ Verification Payment Received', `We received your payment for verification. Our team will review your account shortly.`, 'success', { type: 'wallet' });
+                } else if (type === 'wallet') {
+                    const updatedUser = await tx.user.update({
+                        where: { id: req.user.id },
+                        data: { walletBalance: { increment: amount } }
+                    });
+
+                    await tx.walletTransaction.create({
+                        data: {
+                            userId: req.user.id,
+                            type: 'credit',
+                            amount: amount,
+                            balance: updatedUser.walletBalance,
+                            reference: paymentId,
+                            description: 'Wallet Top-up via Razorpay'
+                        }
+                    });
+
+                    await tx.activityLog.create({
+                        data: {
+                            userId: req.user.id,
+                            action: 'Wallet top-up',
+                            details: `₹${amount}`
+                        }
+                    });
+
+                    const io = req.app.get('io');
+                    sendUserNotification(io, req.user.id, '💰 Wallet Credited', `₹${amount.toLocaleString('en-IN')} added to wallet.`, 'success', { type: 'wallet' });
                 }
             });
 
             return res.json({ message: 'Payment verified successfully.' });
-
         } catch (err) {
-            if (err.code === 'P2002') {
-                console.log(`ℹ️ Payment ${paymentId} already processed (manual verify)`);
-                return res.json({ message: 'Payment already processed.', status: 'already_processed' });
-            }
-            if (err.message === 'Unauthorized') return res.status(403).json({ error: 'Unauthorized.' });
-            if (err.message.includes('not found')) return res.status(404).json({ error: err.message });
-            if (err.message === 'Invalid payment type') return res.status(400).json({ error: err.message });
-
-            throw err; // Let outer catch handle it
+            if (err.code === 'P2002') return res.json({ message: 'Payment already processed.', status: 'already_processed' });
+            throw err;
         }
     } catch (err) {
         console.error('Verify payment error:', err);
@@ -323,12 +379,7 @@ router.post('/verify', auth, async (req, res) => {
 // POST /api/payments/webhook - Handle Razorpay webhooks
 router.post('/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
     try {
-        // In production, verify webhook signature here
-        // const signature = req.headers['x-razorpay-signature'];
-        // verifyWebhookSignature(req.body, signature, webhookSecret);
-
         const event = req.body;
-
         if (event.event === 'payment.captured') {
             const paymentEntity = event.payload.payment.entity;
             const orderId = paymentEntity.order_id;
@@ -336,11 +387,47 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
 
             try {
                 const result = await prisma.$transaction(async (tx) => {
-                    // Try to create the payment log (idempotency anchor)
                     const deal = await tx.escrowDeal.findFirst({ where: { razorpayOrderId: orderId } });
                     const verificationRequest = await tx.verificationRequest.findFirst({ where: { razorpayOrderId: orderId } });
 
-                    if (!deal && !verificationRequest) return null; // Ignore unknown orders
+                    if (!deal && !verificationRequest) {
+                        if (paymentEntity.notes && paymentEntity.notes.type === 'wallet') {
+                            const userId = parseInt(paymentEntity.notes.userId);
+                            const amount = paymentEntity.amount / 100;
+
+                            await tx.paymentLog.create({
+                                data: {
+                                    type: 'wallet',
+                                    entityId: userId,
+                                    razorpayOrderId: orderId,
+                                    razorpayPaymentId: paymentId,
+                                    amount: amount,
+                                    currency: 'INR',
+                                    status: 'paid',
+                                    eventType: 'payment.captured',
+                                    metadata: paymentEntity
+                                }
+                            });
+
+                            const updatedUser = await tx.user.update({
+                                where: { id: userId },
+                                data: { walletBalance: { increment: amount } }
+                            });
+
+                            await tx.walletTransaction.create({
+                                data: {
+                                    userId: userId,
+                                    type: 'credit',
+                                    amount: amount,
+                                    balance: updatedUser.walletBalance,
+                                    reference: paymentId,
+                                    description: 'Wallet Top-up via Razorpay (Webhook)'
+                                }
+                            });
+                            return { type: 'wallet', userId, amount };
+                        }
+                        return null;
+                    }
 
                     await tx.paymentLog.create({
                         data: {
@@ -359,116 +446,48 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
                     if (deal) {
                         await tx.escrowDeal.update({
                             where: { id: deal.id },
-                            data: {
-                                razorpayPaymentId: paymentId,
-                                paymentStatus: 'paid',
-                                paidAmount: deal.totalAmount,
-                                status: 'active'
-                            }
+                            data: { razorpayPaymentId: paymentId, paymentStatus: 'paid', paidAmount: deal.totalAmount, status: 'active' }
                         });
                         return { type: 'escrow', deal };
                     } else if (verificationRequest) {
                         await tx.verificationRequest.update({
                             where: { id: verificationRequest.id },
-                            data: {
-                                razorpayPaymentId: paymentId,
-                                paymentStatus: 'paid',
-                                status: 'pending'
-                            }
+                            data: { razorpayPaymentId: paymentId, paymentStatus: 'paid', status: 'pending' }
                         });
                         return { type: 'verification', request: verificationRequest };
                     }
                 });
 
-                // Send notifications AFTER transaction commits
                 if (result) {
                     const io = req.app.get('io');
                     if (result.type === 'escrow') {
                         const deal = result.deal;
-                        sendUserNotification(io, deal.clientId, '✅ Payment Successful', `Your payment of ₹${deal.totalAmount.toLocaleString('en-IN')} for "${deal.title}" was successful.`, 'success');
-                        sendUserNotification(io, deal.vendorId, '💰 Payment Received', `Payment for "${deal.title}" was received. You can now start the work.`, 'success');
-
-                        // Create a system message in the chat
-                        try {
-                            const systemMessage = await prisma.message.create({
-                                data: {
-                                    senderId: deal.clientId,
-                                    receiverId: deal.vendorId,
-                                    chatId: deal.chatId,
-                                    content: `✅ Escrow Payment Confirmed: ₹${deal.totalAmount.toLocaleString('en-IN')} for "${deal.title}". The deal is now active.`,
-                                    messageType: 'escrow_payment'
-                                },
-                                include: {
-                                    sender: {
-                                        select: { displayName: true, avatarUrl: true, username: true }
-                                    }
-                                }
-                            });
-
-                            const socketResult = {
-                                ...systemMessage,
-                                sender_name: systemMessage.sender.displayName,
-                                sender_avatar: systemMessage.sender.avatarUrl,
-                                sender_username: systemMessage.sender.username,
-                            };
-                            io.to(deal.chatId).emit('newMessage', socketResult);
-                            // Also notify receiver's personal room
-                            io.to(`user_${deal.vendorId}`).emit('newMessage', socketResult);
-                            io.to(`user_${deal.clientId}`).emit('newMessage', socketResult);
-                        } catch (msgErr) {
-                            console.error('Failed to send escrow payment chat message (webhook):', msgErr);
-                        }
+                        sendUserNotification(io, deal.clientId, '✅ Payment Successful', `Payment for "${deal.title}" received.`, 'success', { type: 'escrow', dealId: deal.id, chatId: deal.chatId });
+                        sendUserNotification(io, deal.vendorId, '💰 Payment Received', `Payment for "${deal.title}" received.`, 'success', { type: 'escrow', dealId: deal.id, chatId: deal.chatId });
                     } else if (result.type === 'verification') {
-                        sendUserNotification(io, result.request.userId, '🛡️ Verification Payment Received', `Your verification payment was received.`, 'success');
+                        sendUserNotification(io, result.request.userId, '🛡️ Verification Payment Received', `Payment received.`, 'success', { type: 'wallet' });
+                    } else if (result.type === 'wallet') {
+                        sendUserNotification(io, result.userId, '💰 Wallet Credited', `₹${result.amount.toLocaleString('en-IN')} added to wallet.`, 'success', { type: 'wallet' });
                     }
                 }
-
             } catch (err) {
-                if (err.code === 'P2002') {
-                    console.log(` Payment ${paymentId} already processed (webhook)`);
-                    return res.json({ status: 'already_processed' });
-                }
+                if (err.code === 'P2002') return res.json({ status: 'already_processed' });
                 throw err;
             }
         } else if (event.event === 'payment.failed') {
             const paymentEntity = event.payload.payment.entity;
             const orderId = paymentEntity.order_id;
-
-            // Log failed payment
             await prisma.paymentLog.create({
-                data: {
-                    type: 'unknown',
-                    entityId: 0,
-                    razorpayOrderId: orderId,
-                    amount: paymentEntity.amount / 100,
-                    currency: paymentEntity.currency,
-                    status: 'failed',
-                    eventType: 'payment.failed',
-                    metadata: paymentEntity
-                }
+                data: { type: 'unknown', entityId: 0, razorpayOrderId: orderId, amount: paymentEntity.amount / 100, currency: paymentEntity.currency, status: 'failed', eventType: 'payment.failed', metadata: paymentEntity }
             });
-
             const io = req.app.get('io');
-            // Try to notify user if we can find the order
-            const deal = await prisma.escrowDeal.findFirst({
-                where: { razorpayOrderId: orderId }
-            });
-            if (deal) {
-                sendUserNotification(io, deal.clientId, '❌ Payment Failed', `Your payment of ₹${deal.totalAmount.toLocaleString('en-IN')} for "${deal.title}" failed.`, 'alert');
-            } else {
-                const verificationRequest = await prisma.verificationRequest.findFirst({
-                    where: { razorpayOrderId: orderId }
-                });
-                if (verificationRequest) {
-                    sendUserNotification(io, verificationRequest.userId, '❌ Payment Failed', `Your verification payment failed.`, 'alert');
-                }
-            }
+            const deal = await prisma.escrowDeal.findFirst({ where: { razorpayOrderId: orderId } });
+            if (deal) sendUserNotification(io, deal.clientId, '❌ Payment Failed', `Payment for "${deal.title}" failed.`, 'alert', { type: 'escrow', dealId: deal.id, chatId: deal.chatId });
         }
-
         res.json({ status: 'ok' });
     } catch (err) {
         console.error('Webhook error:', err);
-        res.status(500).json({ error: 'Webhook processing failed.' });
+        res.status(500).json({ error: 'Webhook failed.' });
     }
 });
 

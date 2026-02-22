@@ -24,6 +24,8 @@ const Register = () => {
   const [error, setError] = useState("");
   const [isSendingOtp, setIsSendingOtp] = useState(false);
   const [otpSent, setOtpSent] = useState(false);
+  const [agreeToTerms, setAgreeToTerms] = useState(false);
+  const [agreeToPrivacy, setAgreeToPrivacy] = useState(false);
   const { user } = useAuth();
 
   // Step 1: Send OTP to email
@@ -134,9 +136,36 @@ const Register = () => {
                   />
                   <PasswordStrength password={password} />
                 </div>
-                <Button type="submit" className="w-full" disabled={isSendingOtp}>
+                <Button type="submit" className="w-full" disabled={isSendingOtp || !agreeToTerms || !agreeToPrivacy}>
                   {isSendingOtp ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Sending OTP...</> : "Continue →"}
                 </Button>
+
+                <div className="space-y-3 mt-4">
+                  <div className="flex items-start gap-2">
+                    <input
+                      type="checkbox"
+                      id="terms"
+                      checked={agreeToTerms}
+                      onChange={(e) => setAgreeToTerms(e.target.checked)}
+                      className="mt-1 cursor-pointer"
+                    />
+                    <label htmlFor="terms" className="text-xs text-muted-foreground cursor-pointer">
+                      I agree to the <a href="/terms" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Terms and Conditions</a>
+                    </label>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <input
+                      type="checkbox"
+                      id="privacy"
+                      checked={agreeToPrivacy}
+                      onChange={(e) => setAgreeToPrivacy(e.target.checked)}
+                      className="mt-1 cursor-pointer"
+                    />
+                    <label htmlFor="privacy" className="text-xs text-muted-foreground cursor-pointer">
+                      I agree to the <a href="/privacy" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Privacy Policy</a>
+                    </label>
+                  </div>
+                </div>
               </form>
             </>
           ) : (

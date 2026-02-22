@@ -29,6 +29,10 @@ const RequestPayoutDialog = ({ open, onOpenChange, maxAmount, onSuccess }: Reque
     // UPI details
     const [upiVpa, setUpiVpa] = useState("");
 
+    // Contact details
+    const [phoneNumber, setPhoneNumber] = useState("");
+    const [email, setEmail] = useState("");
+
     const validateForm = () => {
         const numAmount = parseFloat(amount);
         if (isNaN(numAmount) || numAmount < 500) {
@@ -67,15 +71,15 @@ const RequestPayoutDialog = ({ open, onOpenChange, maxAmount, onSuccess }: Reque
                 });
                 return false;
             }
-        } else {
-            if (!upiVpa.trim() || !upiVpa.includes("@")) {
-                toast({
-                    title: "Invalid UPI ID",
-                    description: "Please enter a valid UPI ID (e.g., user@paytm)",
-                    variant: "destructive",
-                });
-                return false;
-            }
+        }
+
+        if (!phoneNumber.trim() || phoneNumber.length < 10) {
+            toast({
+                title: "Invalid Phone Number",
+                description: "Please enter a valid phone number for admin contact",
+                variant: "destructive",
+            });
+            return false;
         }
 
         return true;
@@ -94,7 +98,9 @@ const RequestPayoutDialog = ({ open, onOpenChange, maxAmount, onSuccess }: Reque
                 bankAccount: paymentMethod === "bank" ? bankAccount : undefined,
                 ifscCode: paymentMethod === "bank" ? ifscCode : undefined,
                 accountName,
-                upiVpa: paymentMethod === "upi" ? upiVpa : undefined
+                upiVpa: paymentMethod === "upi" ? upiVpa : undefined,
+                phoneNumber,
+                email: email || undefined
             });
 
             toast({
@@ -220,6 +226,31 @@ const RequestPayoutDialog = ({ open, onOpenChange, maxAmount, onSuccess }: Reque
                             </div>
                         </TabsContent>
                     </Tabs>
+
+                    <div className="border-t pt-4 mt-2 space-y-3">
+                        <div className="space-y-2">
+                            <Label htmlFor="phoneNumber">Phone Number (Required for Admin Contact)</Label>
+                            <Input
+                                id="phoneNumber"
+                                type="tel"
+                                placeholder="e.g. 9876543210"
+                                value={phoneNumber}
+                                onChange={(e) => setPhoneNumber(e.target.value)}
+                                required
+                            />
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label htmlFor="contactEmail">Contact Email (Optional)</Label>
+                            <Input
+                                id="contactEmail"
+                                type="email"
+                                placeholder="e.g. john@example.com"
+                                value={email}
+                                onChange={(e) => setEmail(e.target.value)}
+                            />
+                        </div>
+                    </div>
 
                     <DialogFooter className="pt-4">
                         <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>

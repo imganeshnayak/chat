@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   Search, Send, Paperclip, Smile, ArrowLeft, Image, FileText,
   Mic, MoreVertical, IndianRupee, User as UserIcon, Plus,
-  Trash2, Ban, AlertTriangle, Download, X, CheckCircle2, Loader2, LogOut, Settings, User, HelpCircle, ShieldCheck, EyeOff, Eye, Lock, Shield
+  Trash2, Ban, AlertTriangle, Download, X, CheckCircle2, Loader2, LogOut, Settings, User, HelpCircle, ShieldCheck, EyeOff, Eye, Lock, Shield, Camera, Film
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
@@ -290,7 +290,9 @@ const ChatView = ({
   isBlurred,
   setIsBlurred,
   isPreviewViewOnce,
-  setIsPreviewViewOnce
+  setIsPreviewViewOnce,
+  currentAcceptType,
+  setCurrentAcceptType
 }: {
   selectedChat: ChatType | null;
   setSelectedChat: (chat: ChatType | null) => void;
@@ -317,6 +319,8 @@ const ChatView = ({
   setIsBlurred: (val: boolean) => void;
   isPreviewViewOnce: boolean;
   setIsPreviewViewOnce: (val: boolean) => void;
+  currentAcceptType: string;
+  setCurrentAcceptType: (val: string) => void;
 }) => {
   const [isHoldingView, setIsHoldingView] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -471,7 +475,7 @@ const ChatView = ({
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={() => navigate(`/escrow?chatId=${selectedChat.chat_id}&vendorId=${selectedChat.user_id}`)}
+                onClick={() => navigate(`/escrow?chatId=${selectedChat.chat_id}&vendorId=${selectedChat.user_id}&vendorUsername=${selectedChat.username}`)}
                 title="Escrow"
               >
                 <span className="text-lg font-bold text-primary">₹</span>
@@ -667,7 +671,7 @@ const ChatView = ({
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  navigate('/escrow');
+                                  navigate(`/escrow?chatId=${selectedChat.chat_id}`);
                                 }}
                                 className={`w-full py-2 bg-white rounded-lg text-sm font-bold shadow-sm hover:bg-white/90 transition-all flex items-center justify-center gap-2 active:scale-[0.98] ${(msg.messageType === 'escrow_released' || (msg as any).message_type === 'escrow_released') ? "text-emerald-700" : "text-indigo-700"
                                   }`}
@@ -759,21 +763,62 @@ const ChatView = ({
             </PopoverTrigger>
             <EmojiPicker onSelect={(emoji) => setNewMessage(newMessage + emoji)} />
           </Popover>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="shrink-0"
+              >
+                <Paperclip className="h-5 w-5 text-muted-foreground" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-48 bg-card border-border">
+              <DropdownMenuItem
+                onClick={() => {
+                  setCurrentAcceptType("image/*");
+                  setTimeout(() => fileInputRef.current?.click(), 50);
+                }}
+              >
+                <Camera className="h-4 w-4 mr-2" />
+                <span>Camera</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => {
+                  setCurrentAcceptType("image/*");
+                  setTimeout(() => fileInputRef.current?.click(), 50);
+                }}
+              >
+                <Image className="h-4 w-4 mr-2" />
+                <span>Photos</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => {
+                  setCurrentAcceptType("video/*");
+                  setTimeout(() => fileInputRef.current?.click(), 50);
+                }}
+              >
+                <Film className="h-4 w-4 mr-2" />
+                <span>Videos</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => {
+                  setCurrentAcceptType(".pdf,.doc,.docx,.txt,.zip,.rar");
+                  setTimeout(() => fileInputRef.current?.click(), 50);
+                }}
+              >
+                <FileText className="h-4 w-4 mr-2" />
+                <span>Documents</span>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <input
             type="file"
             ref={fileInputRef}
             onChange={handleFileSelect}
             className="hidden"
-            accept="image/*,.pdf,.doc,.docx,.txt,.zip,.rar"
+            accept={currentAcceptType}
           />
-          <Button
-            variant="ghost"
-            size="icon"
-            className="shrink-0"
-            onClick={() => fileInputRef.current?.click()}
-          >
-            <Paperclip className="h-5 w-5 text-muted-foreground" />
-          </Button>
           <Input
             ref={messageInputRef}
             className="bg-secondary border-border"
@@ -1033,6 +1078,7 @@ const ChatPage = () => {
   const [error, setError] = useState("");
   const messageInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [currentAcceptType, setCurrentAcceptType] = useState<string>("image/*,.pdf,.doc,.docx,.txt,.zip,.rar");
   const [selectedMessages, setSelectedMessages] = useState<number[]>([]);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [isBlurred, setIsBlurred] = useState(false);
@@ -1259,7 +1305,7 @@ const ChatPage = () => {
   useEffect(() => {
     // Clear blur state when changing chats
     setIsBlurred(false);
-    
+
     if (selectedChat && user) {
       loadMessages(selectedChat.chat_id);
       socketService.joinChat(user.id, selectedChat.chat_id);
@@ -1294,12 +1340,12 @@ const ChatPage = () => {
         // Add screenshot attempt notification to messages
         setMessages((prev) => {
           // Prevent duplicates
-          const isDuplicate = prev.some(m => 
-            m.messageType === 'notification' && 
+          const isDuplicate = prev.some(m =>
+            m.messageType === 'notification' &&
             m.content.includes('attempted to take a screenshot') &&
             Math.abs(new Date(m.createdAt).getTime() - new Date(data.message.createdAt).getTime()) < 1000
           );
-          
+
           if (isDuplicate) return prev;
           return [...prev, data.message];
         });
@@ -1504,6 +1550,8 @@ const ChatPage = () => {
             setIsBlurred={setIsBlurred}
             isPreviewViewOnce={isPreviewViewOnce}
             setIsPreviewViewOnce={setIsPreviewViewOnce}
+            currentAcceptType={currentAcceptType}
+            setCurrentAcceptType={setCurrentAcceptType}
           />
         ) : (
           <ConversationList
@@ -1566,6 +1614,8 @@ const ChatPage = () => {
           pendingFile={pendingFile}
           setPendingFile={setPendingFile}
           handleConfirmUpload={handleConfirmUpload}
+          currentAcceptType={currentAcceptType}
+          setCurrentAcceptType={setCurrentAcceptType}
           isLoading={isLoading}
           isBlurred={isBlurred}
           setIsBlurred={setIsBlurred}

@@ -48,6 +48,7 @@ export interface AuthUser {
   displayName: string;
   bio?: string;
   avatarUrl?: string;
+  coverPhotoUrl?: string;
   role: string;
   status: string;
   verified?: boolean;
@@ -121,6 +122,10 @@ export function rateUser(data: {
   });
 }
 
+export function getRatingEligibility(userId: number): Promise<{ canRate: boolean; reason?: string | null }> {
+  return apiFetch(`/api/users/${userId}/rating-eligibility`);
+}
+
 export function getAllUsers(): Promise<AuthUser[]> {
   return apiFetch<AuthUser[]>("/api/users");
 }
@@ -148,6 +153,27 @@ export async function uploadAvatar(file: File): Promise<{ avatarUrl: string }> {
 
   const token = localStorage.getItem("authToken");
   const res = await fetch(`${API_URL}/api/users/avatar`, {
+    method: "POST",
+    headers: {
+      ...(token && { 'Authorization': `Bearer ${token}` }),
+    },
+    body: formData,
+  });
+
+  if (!res.ok) {
+    const error = await res.text();
+    throw new Error(error);
+  }
+
+  return res.json();
+}
+
+export async function uploadCoverPhoto(file: File): Promise<{ coverPhotoUrl: string }> {
+  const formData = new FormData();
+  formData.append("coverPhoto", file);
+
+  const token = localStorage.getItem("authToken");
+  const res = await fetch(`${API_URL}/api/users/cover-photo`, {
     method: "POST",
     headers: {
       ...(token && { 'Authorization': `Bearer ${token}` }),
@@ -529,7 +555,18 @@ export interface WalletTransaction {
   balance: number;
   reference?: string;
   description: string;
+  metadata?: any;
   createdAt: string;
+  deal?: {
+    id: number;
+    title: string;
+    createdAt: string;
+    status: string;
+    totalAmount: number;
+    chatId: string;
+    client: { id: number; displayName: string; username: string };
+    vendor: { id: number; displayName: string; username: string };
+  } | null;
 }
 
 export interface PayoutRequest {
@@ -548,11 +585,14 @@ export interface PayoutRequest {
   adminNote?: string;
   requestedAt: string;
   processedAt?: string;
+  phoneNumber?: string;
+  email?: string;
   user?: {
     id: number;
     username: string;
     displayName: string;
     email: string;
+    phoneNumber?: string;
   };
 }
 
@@ -560,8 +600,8 @@ export function getWalletBalance(): Promise<{ balance: number }> {
   return apiFetch<{ balance: number }>("/api/wallet/balance");
 }
 
-export function getWalletTransactions(): Promise<WalletTransaction[]> {
-  return apiFetch<WalletTransaction[]>("/api/wallet/transactions");
+export function getWalletTransactions(type: string = 'all'): Promise<WalletTransaction[]> {
+  return apiFetch<WalletTransaction[]>(`/api/wallet/transactions?type=${type}`);
 }
 
 export function requestPayout(data: {
@@ -571,6 +611,8 @@ export function requestPayout(data: {
   ifscCode?: string;
   accountName: string;
   upiVpa?: string;
+  phoneNumber: string;
+  email?: string;
 }): Promise<PayoutRequest> {
   return apiFetch<PayoutRequest>("/api/wallet/payout/request", {
     method: "POST",
@@ -641,8 +683,9 @@ export interface EscrowDeal {
   transactions: EscrowTransaction[];
 }
 
-export function getEscrowDeals(): Promise<EscrowDeal[]> {
-  return apiFetch<EscrowDeal[]>("/api/escrow");
+export function getEscrowDeals(chatId?: string): Promise<EscrowDeal[]> {
+  const query = chatId ? `?chatId=${chatId}` : "";
+  return apiFetch<EscrowDeal[]>(`/api/escrow${query}`);
 }
 
 export function getEscrowDeal(id: number): Promise<EscrowDeal> {
@@ -772,11 +815,18 @@ export function initiateVerificationPayment(): Promise<PaymentOrder> {
   });
 }
 
+export function initiateWalletTopup(amount: number): Promise<PaymentOrder> {
+  return apiFetch<PaymentOrder>("/api/payments/wallet/initiate", {
+    method: "POST",
+    body: JSON.stringify({ amount }),
+  });
+}
+
 export function verifyPayment(data: {
   orderId: string;
   paymentId: string;
   signature: string;
-  type: "escrow" | "verification";
+  type: "escrow" | "verification" | "wallet";
   entityId: number;
 }): Promise<{ message: string; status: string }> {
   return apiFetch<{ message: string; status: string }>("/api/payments/verify", {
@@ -797,6 +847,7 @@ export interface Notification {
   sentBy: string;
   sentById?: number;
   isRead: boolean;
+  metadata?: any;
 }
 
 export function getNotifications(): Promise<Notification[]> {

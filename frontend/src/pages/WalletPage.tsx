@@ -9,6 +9,18 @@ import { ArrowUpRight, ArrowDownLeft, Wallet, Clock, CheckCircle2, XCircle, Aler
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import RequestPayoutDialog from "@/components/chat/RequestPayoutDialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Info, Plus } from "lucide-react";
+import { initiateWalletTopup, verifyPayment } from "@/lib/api";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { toast } from "sonner";
+
+declare global {
+    interface Window {
+        Razorpay: any;
+    }
+}
 
 const WalletPage = () => {
     // Set page title
@@ -21,12 +33,19 @@ const WalletPage = () => {
     const [payoutRequests, setPayoutRequests] = useState<PayoutRequest[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isPayoutOpen, setIsPayoutOpen] = useState(false);
+    const [filterType, setFilterType] = useState("all");
+    const [selectedTx, setSelectedTx] = useState<WalletTransaction | null>(null);
+    const [isAddMoneyOpen, setIsAddMoneyOpen] = useState(false);
+    const [addAmount, setAddAmount] = useState<string>("500");
+    const [agreeToWalletTerms, setAgreeToWalletTerms] = useState(false);
+    const [isProcessingPayment, setIsProcessingPayment] = useState(false);
 
-    const loadData = async () => {
+    const loadData = async (type = filterType) => {
+        setIsLoading(true);
         try {
             const [balanceData, txData, payoutData] = await Promise.all([
                 getWalletBalance(),
-                getWalletTransactions(),
+                getWalletTransactions(type),
                 getPayoutRequests()
             ]);
             setBalance(balanceData.balance);
@@ -40,8 +59,8 @@ const WalletPage = () => {
     };
 
     useEffect(() => {
-        loadData();
-    }, []);
+        loadData(filterType);
+    }, [filterType]);
 
     const formatCurrency = (amount: number) => {
         return new Intl.NumberFormat('en-IN', {
@@ -76,6 +95,10 @@ const WalletPage = () => {
         }
     };
 
+    const dealCounterparty = selectedTx?.deal && user
+        ? (selectedTx.deal.client.id === user.id ? selectedTx.deal.vendor : selectedTx.deal.client)
+        : null;
+
     return (
         <div className="container max-w-4xl mx-auto p-4 md:p-6 space-y-6 pb-20 md:pb-6">
             <h1 className="text-3xl font-bold flex items-center gap-2">
@@ -96,15 +119,138 @@ const WalletPage = () => {
                                 Minimum payout amount: ₹500.00
                             </p>
                         </div>
-                        <Button
-                            onClick={() => setIsPayoutOpen(true)}
-                            disabled={balance < 500}
-                        >
-                            Request Payout
-                        </Button>
+                        <div className="flex flex-col gap-2 sm:flex-row">
+                            <Button
+                                variant="outline"
+                                className="border-primary text-primary hover:bg-primary/10"
+                                onClick={() => setIsAddMoneyOpen(true)}
+                            >
+                                <Plus className="w-4 h-4 mr-1" /> Add Money
+                            </Button>
+                            <Button
+                                onClick={() => setIsPayoutOpen(true)}
+                                disabled={balance < 500}
+                                className="bg-primary hover:bg-primary/90"
+                            >
+                                Request Payout
+                            </Button>
+                        </div>
                     </div>
                 </CardHeader>
             </Card>
+
+            {/* Add Money Dialog */}
+            <Dialog open={isAddMoneyOpen} onOpenChange={setIsAddMoneyOpen}>
+                <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>Add Money to Wallet</DialogTitle>
+                        <CardDescription>Enter the amount you want to add to your Vesper wallet.</CardDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                        <div className="space-y-2">
+                            <Label htmlFor="amount">Amount (₹)</Label>
+                            <Input
+                                id="amount"
+                                type="number"
+                                placeholder="500"
+                                value={addAmount}
+                                onChange={(e) => setAddAmount(e.target.value)}
+                                min="1"
+                            />
+                        </div>
+                        <div className="grid grid-cols-3 gap-2">
+                            {["500", "1000", "2000"].map((amt) => (
+                                <Button
+                                    key={amt}
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => setAddAmount(amt)}
+                                    className={addAmount === amt ? "border-primary bg-primary/5" : ""}
+                                >
+                                    ₹{amt}
+                                </Button>
+                            ))}
+                        </div>
+                        <div className="flex items-start gap-2 p-3 bg-secondary/20 rounded-lg">
+                            <input
+                                type="checkbox"
+                                id="walletTerms"
+                                checked={agreeToWalletTerms}
+                                onChange={(e) => setAgreeToWalletTerms(e.target.checked)}
+                                className="mt-1 cursor-pointer"
+                            />
+                            <label htmlFor="walletTerms" className="text-xs text-muted-foreground cursor-pointer">
+                                I accept the <a href="/terms" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Terms and Conditions</a>
+                            </label>
+                        </div>
+                    </div>
+                    <div className="flex justify-end gap-3">
+                        <Button variant="outline" onClick={() => setIsAddMoneyOpen(false)}>Cancel</Button>
+                        <Button
+                            onClick={async () => {
+                                if (!agreeToWalletTerms) {
+                                    toast.error("Please agree to the Terms and Conditions");
+                                    return;
+                                }
+                                const amount = parseFloat(addAmount);
+                                if (isNaN(amount) || amount < 1) {
+                                    toast.error("Please enter a valid amount (min ₹1)");
+                                    return;
+                                }
+
+                                setIsProcessingPayment(true);
+                                try {
+                                    const order = await initiateWalletTopup(amount);
+
+                                    const options = {
+                                        key: order.key_id,
+                                        amount: order.amount,
+                                        currency: order.currency,
+                                        name: "Vesper Wallet",
+                                        description: `Top-up ₹${amount}`,
+                                        order_id: order.orderId,
+                                        handler: async function (response: any) {
+                                            try {
+                                                await verifyPayment({
+                                                    orderId: response.razorpay_order_id,
+                                                    paymentId: response.razorpay_payment_id,
+                                                    signature: response.razorpay_signature,
+                                                    type: "wallet",
+                                                    entityId: user?.id || 0
+                                                });
+                                                toast.success(`₹${amount} added successfully!`);
+                                                setIsAddMoneyOpen(false);
+                                                setAgreeToWalletTerms(false);
+                                                loadData();
+                                            } catch (err) {
+                                                console.error("Verification error:", err);
+                                                toast.error("Payment verification failed. Please contact support.");
+                                            }
+                                        },
+                                        prefill: {
+                                            name: user?.displayName,
+                                            email: user?.username + "@vesper.chat", // Fallback email
+                                        },
+                                        theme: { color: "#ec4899" }
+                                    };
+
+                                    const rzp = new window.Razorpay(options);
+                                    rzp.open();
+                                } catch (error) {
+                                    console.error("Add money error:", error);
+                                    toast.error("Failed to initiate payment.");
+                                } finally {
+                                    setIsProcessingPayment(false);
+                                }
+                            }}
+                            disabled={isProcessingPayment || !agreeToWalletTerms}
+                        >
+                            {isProcessingPayment ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+                            Proceed to Pay
+                        </Button>
+                    </div>
+                </DialogContent>
+            </Dialog>
 
             <Tabs defaultValue="transactions" className="w-full">
                 <TabsList className="grid w-full grid-cols-2">
@@ -115,9 +261,26 @@ const WalletPage = () => {
                 {/* Transactions Tab */}
                 <TabsContent value="transactions">
                     <Card>
-                        <CardHeader>
-                            <CardTitle>Transaction History</CardTitle>
-                            <CardDescription>Recent activity in your wallet</CardDescription>
+                        <CardHeader className="pb-2">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <CardTitle>Transaction History</CardTitle>
+                                    <CardDescription>Recent activity in your wallet</CardDescription>
+                                </div>
+                                <div className="flex gap-1 overflow-x-auto pb-1 max-w-[200px] md:max-w-none">
+                                    {["all", "sent", "received", "added"].map((t) => (
+                                        <Button
+                                            key={t}
+                                            variant={filterType === t ? "default" : "outline"}
+                                            size="sm"
+                                            className="text-[10px] h-7 capitalize px-2"
+                                            onClick={() => setFilterType(t)}
+                                        >
+                                            {t}
+                                        </Button>
+                                    ))}
+                                </div>
+                            </div>
                         </CardHeader>
                         <CardContent>
                             <ScrollArea className="h-[400px] pr-4">
@@ -128,23 +291,30 @@ const WalletPage = () => {
                                 ) : (
                                     <div className="space-y-4">
                                         {transactions.map((tx) => (
-                                            <div key={tx.id} className="flex items-center justify-between p-4 rounded-lg bg-secondary/20">
+                                            <div
+                                                key={tx.id}
+                                                className="flex items-center justify-between p-4 rounded-lg bg-secondary/20 hover:bg-secondary/30 transition-colors cursor-pointer"
+                                                onClick={() => setSelectedTx(tx)}
+                                            >
                                                 <div className="flex items-start gap-3">
-                                                    <div className={`p-2 rounded-full ${tx.amount > 0 ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
+                                                    <div className={`p-2 rounded-full ${tx.amount > 0 ? 'bg-green-100/50 text-green-600' : 'bg-red-100/50 text-red-600'}`}>
                                                         {tx.amount > 0 ? <ArrowDownLeft className="h-4 w-4" /> : <ArrowUpRight className="h-4 w-4" />}
                                                     </div>
                                                     <div>
-                                                        <p className="font-medium text-sm">{tx.description}</p>
-                                                        <p className="text-xs text-muted-foreground">{formatDate(tx.createdAt)}</p>
+                                                        <p className="font-medium text-sm line-clamp-1">{tx.description}</p>
+                                                        <p className="text-[10px] text-muted-foreground">{formatDate(tx.createdAt)}</p>
                                                     </div>
                                                 </div>
-                                                <div className="text-right">
-                                                    <p className={`font-bold ${tx.amount > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                                        {tx.amount > 0 ? '+' : ''}{formatCurrency(tx.amount)}
-                                                    </p>
-                                                    <p className="text-xs text-muted-foreground">
-                                                        Bal: {formatCurrency(tx.balance)}
-                                                    </p>
+                                                <div className="text-right flex items-center gap-3">
+                                                    <div>
+                                                        <p className={`font-bold text-sm ${tx.amount > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                                            {tx.amount > 0 ? '+' : ''}{formatCurrency(tx.amount)}
+                                                        </p>
+                                                        <p className="text-[10px] text-muted-foreground">
+                                                            {formatCurrency(tx.balance)}
+                                                        </p>
+                                                    </div>
+                                                    <Info className="h-3 w-3 text-muted-foreground" />
                                                 </div>
                                             </div>
                                         ))}
@@ -202,8 +372,96 @@ const WalletPage = () => {
                 open={isPayoutOpen}
                 onOpenChange={setIsPayoutOpen}
                 maxAmount={balance}
-                onSuccess={loadData}
+                onSuccess={() => loadData(filterType)}
             />
+
+            {/* Transaction Detail Modal */}
+            <Dialog open={!!selectedTx} onOpenChange={(open) => !open && setSelectedTx(null)}>
+                <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>Transaction Details</DialogTitle>
+                    </DialogHeader>
+                    {selectedTx && (
+                        <div className="space-y-4 py-2">
+                            <div className="flex justify-between items-center pb-2 border-b">
+                                <span className="text-sm text-muted-foreground">Type</span>
+                                <Badge variant="outline" className="capitalize">{selectedTx.type.replace('_', ' ')}</Badge>
+                            </div>
+                            <div className="flex justify-between items-center pb-2 border-b">
+                                <span className="text-sm text-muted-foreground">Amount</span>
+                                <span className={`font-bold ${selectedTx.amount > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                    {selectedTx.amount > 0 ? '+' : ''}{formatCurrency(selectedTx.amount)}
+                                </span>
+                            </div>
+                            <div className="flex justify-between items-center pb-2 border-b">
+                                <span className="text-sm text-muted-foreground">Balance After</span>
+                                <span className="font-medium">{formatCurrency(selectedTx.balance)}</span>
+                            </div>
+                            <div className="flex justify-between items-center pb-2 border-b">
+                                <span className="text-sm text-muted-foreground">Date</span>
+                                <span className="text-sm">{formatDate(selectedTx.createdAt)}</span>
+                            </div>
+                            {selectedTx.reference && (
+                                <div className="flex justify-between items-center pb-2 border-b">
+                                    <span className="text-sm text-muted-foreground">Reference</span>
+                                    <span className="text-xs font-mono bg-secondary px-1 rounded">{selectedTx.reference}</span>
+                                </div>
+                            )}
+                            {selectedTx.metadata && !selectedTx.deal && (
+                                <>
+                                    {selectedTx.metadata.otherDisplayName && (
+                                        <div className="flex justify-between items-center pb-2 border-b">
+                                            <span className="text-sm text-muted-foreground">Other Party</span>
+                                            <span className="text-sm font-medium">{selectedTx.metadata.otherDisplayName}</span>
+                                        </div>
+                                    )}
+                                    {selectedTx.metadata.dealTitle && (
+                                        <div className="flex justify-between items-center pb-2 border-b">
+                                            <span className="text-sm text-muted-foreground">Deal</span>
+                                            <span className="text-sm font-medium">{selectedTx.metadata.dealTitle}</span>
+                                        </div>
+                                    )}
+                                </>
+                            )}
+                            {selectedTx.deal && (
+                                <>
+                                    <div className="flex justify-between items-center pb-2 border-b">
+                                        <span className="text-sm text-muted-foreground">Deal</span>
+                                        <span className="text-sm font-medium">{selectedTx.deal.title}</span>
+                                    </div>
+                                    <div className="flex justify-between items-center pb-2 border-b">
+                                        <span className="text-sm text-muted-foreground">Deal Created</span>
+                                        <span className="text-sm">{formatDate(selectedTx.deal.createdAt)}</span>
+                                    </div>
+                                    <div className="flex justify-between items-center pb-2 border-b">
+                                        <span className="text-sm text-muted-foreground">Deal Amount</span>
+                                        <span className="text-sm font-medium">{formatCurrency(selectedTx.deal.totalAmount)}</span>
+                                    </div>
+                                    <div className="flex justify-between items-center pb-2 border-b">
+                                        <span className="text-sm text-muted-foreground">Deal Status</span>
+                                        <Badge variant="outline" className="capitalize">{selectedTx.deal.status}</Badge>
+                                    </div>
+                                    {dealCounterparty && (
+                                        <div className="flex justify-between items-center pb-2 border-b">
+                                            <span className="text-sm text-muted-foreground">With</span>
+                                            <span className="text-sm font-medium">{dealCounterparty.displayName}</span>
+                                        </div>
+                                    )}
+                                    <div className="flex justify-between items-center pb-2 border-b">
+                                        <span className="text-sm text-muted-foreground">Chat ID</span>
+                                        <span className="text-xs font-mono bg-secondary px-1 rounded">{selectedTx.deal.chatId}</span>
+                                    </div>
+                                </>
+                            )}
+                            <div className="space-y-1">
+                                <span className="text-sm text-muted-foreground">Description</span>
+                                <p className="text-sm p-3 bg-secondary/30 rounded-lg">{selectedTx.description}</p>
+                            </div>
+                        </div>
+                    )}
+                    <Button onClick={() => setSelectedTx(null)}>Close</Button>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 };

@@ -77,6 +77,7 @@ router.get('/username/:username', auth, async (req, res) => {
                 displayName: true,
                 bio: true,
                 avatarUrl: true,
+                coverPhotoUrl: true,
                 socialLinks: true,
                 role: true,
                 status: true,
@@ -107,6 +108,90 @@ router.get('/username/:username', auth, async (req, res) => {
     }
 });
 
+// GET /api/users/:id/rating-eligibility - Check if user can rate another user
+router.get('/:id/rating-eligibility', auth, async (req, res) => {
+    try {
+        const reviewedUserId = parseInt(req.params.id);
+        const reviewerId = req.user.id;
+
+        if (reviewerId === reviewedUserId) {
+            return res.json({ canRate: false, reason: "You cannot rate yourself." });
+        }
+
+        const [hasSent, hasReceived, escrowDeal] = await Promise.all([
+            prisma.message.findFirst({
+                where: { senderId: reviewerId, receiverId: reviewedUserId },
+                select: { id: true }
+            }),
+            prisma.message.findFirst({
+                where: { senderId: reviewedUserId, receiverId: reviewerId },
+                select: { id: true }
+            }),
+            prisma.escrowDeal.findFirst({
+                where: {
+                    OR: [
+                        { clientId: reviewerId, vendorId: reviewedUserId },
+                        { clientId: reviewedUserId, vendorId: reviewerId }
+                    ]
+                },
+                select: { id: true }
+            })
+        ]);
+
+        if (!hasSent || !hasReceived) {
+            return res.json({ canRate: false, reason: "You can rate only users you have a mutual chat with." });
+        }
+
+        if (!escrowDeal) {
+            return res.json({ canRate: false, reason: "You can rate only users you have an escrow deal with." });
+        }
+
+        return res.json({ canRate: true, reason: null });
+    } catch (err) {
+        console.error('Rating eligibility error:', err);
+        res.status(500).json({ error: 'Server error.' });
+    }
+});
+
+// GET /api/users/:id/ratings - Get all ratings for a user
+router.get('/:id/ratings', async (req, res) => {
+    try {
+        const userId = parseInt(req.params.id);
+        
+        const ratings = await prisma.userRating.findMany({
+            where: { reviewedUserId: userId },
+            select: {
+                id: true,
+                rating: true,
+                comment: true,
+                createdAt: true,
+                reviewer: {
+                    select: {
+                        id: true,
+                        username: true,
+                        displayName: true,
+                        avatarUrl: true
+                    }
+                }
+            },
+            orderBy: { createdAt: 'desc' }
+        });
+
+        const totalRating = ratings.length > 0
+            ? (ratings.reduce((sum, r) => sum + r.rating, 0) / ratings.length).toFixed(1)
+            : 0;
+
+        res.json({
+            ratings,
+            totalRating: parseFloat(totalRating),
+            count: ratings.length
+        });
+    } catch (err) {
+        console.error('Fetch ratings error:', err);
+        res.status(500).json({ error: 'Server error.' });
+    }
+});
+
 // GET /api/users/:id - Get user profile with rating
 router.get('/:id', auth, async (req, res) => {
     try {
@@ -120,6 +205,7 @@ router.get('/:id', auth, async (req, res) => {
                 displayName: true,
                 bio: true,
                 avatarUrl: true,
+                coverPhotoUrl: true,
                 socialLinks: true,
                 role: true,
                 status: true,
@@ -167,6 +253,7 @@ router.get('/profile/:id', auth, async (req, res) => {
                 displayName: true,
                 bio: true,
                 avatarUrl: true,
+                coverPhotoUrl: true,
                 role: true,
                 status: true,
                 verified: true,
@@ -205,7 +292,7 @@ router.put('/profile/:id', auth, async (req, res) => {
             return res.status(403).json({ error: 'Not authorized.' });
         }
 
-        const { displayName, bio, email, avatarUrl, role, socialLinks } = req.body;
+        const { displayName, bio, email, avatarUrl, role, socialLinks, phoneNumber } = req.body;
 
         const updateData = {};
         if (displayName !== undefined) updateData.displayName = displayName;
@@ -213,6 +300,7 @@ router.put('/profile/:id', auth, async (req, res) => {
         if (email !== undefined) updateData.email = email;
         if (avatarUrl !== undefined) updateData.avatarUrl = avatarUrl;
         if (socialLinks !== undefined) updateData.socialLinks = socialLinks;
+        if (phoneNumber !== undefined) updateData.phoneNumber = phoneNumber;
         if (role !== undefined && ['client', 'vendor'].includes(role)) updateData.role = role;
 
         const updatedUser = await prisma.user.update({
@@ -225,11 +313,13 @@ router.put('/profile/:id', auth, async (req, res) => {
                 displayName: true,
                 bio: true,
                 avatarUrl: true,
+                coverPhotoUrl: true,
                 role: true,
                 status: true,
                 verified: true,
                 telegramId: true,
                 socialLinks: true,
+                phoneNumber: true,
                 createdAt: true
             }
         });
@@ -272,6 +362,41 @@ router.post('/avatar', auth, upload.single('avatar'), async (req, res) => {
         res.json({ avatarUrl: result.secure_url });
     } catch (err) {
         console.error('Avatar upload error:', err);
+        res.status(500).json({ error: 'Upload failed.' });
+    }
+});
+
+// POST /api/users/cover-photo - Upload cover photo
+router.post('/cover-photo', auth, upload.single('coverPhoto'), async (req, res) => {
+    try {
+        if (!req.file) {
+            return res.status(400).json({ error: 'No file uploaded.' });
+        }
+
+        const result = await new Promise((resolve, reject) => {
+            const stream = cloudinary.uploader.upload_stream(
+                {
+                    folder: 'vesper/covers',
+                    transformation: [{ width: 1200, height: 300, crop: 'fill', gravity: 'auto' }],
+                    access_mode: 'public'
+                },
+                (error, result) => {
+                    if (error) reject(error);
+                    else resolve(result);
+                }
+            );
+            stream.end(req.file.buffer);
+        });
+
+        // Update user's cover photo URL
+        await prisma.user.update({
+            where: { id: req.user.id },
+            data: { coverPhotoUrl: result.secure_url },
+        });
+
+        res.json({ coverPhotoUrl: result.secure_url });
+    } catch (err) {
+        console.error('Cover photo upload error:', err);
         res.status(500).json({ error: 'Upload failed.' });
     }
 });
@@ -319,6 +444,10 @@ router.post('/rate', auth, async (req, res) => {
             return res.status(400).json({ error: "Missing required fields." });
         }
 
+        if (!comment || comment.trim().length === 0) {
+            return res.status(400).json({ error: "Comment is required to submit a rating." });
+        }
+
         if (req.user.id === parseInt(reviewedId)) {
             return res.status(400).json({ error: "You cannot rate yourself." });
         }
@@ -328,6 +457,39 @@ router.post('/rate', auth, async (req, res) => {
             return res.status(400).json({ error: "Rating must be between 1 and 5." });
         }
 
+        const reviewerId = req.user.id;
+        const reviewedUserId = parseInt(reviewedId);
+
+        const [hasSent, hasReceived, escrowDeal] = await Promise.all([
+            prisma.message.findFirst({
+                where: { senderId: reviewerId, receiverId: reviewedUserId },
+                select: { id: true }
+            }),
+            prisma.message.findFirst({
+                where: { senderId: reviewedUserId, receiverId: reviewerId },
+                select: { id: true }
+            }),
+            prisma.escrowDeal.findFirst({
+                where: {
+                    OR: [
+                        { clientId: reviewerId, vendorId: reviewedUserId },
+                        { clientId: reviewedUserId, vendorId: reviewerId }
+                    ]
+                },
+                select: { id: true }
+            })
+        ]);
+
+        if (!hasSent || !hasReceived) {
+            return res.status(403).json({ error: "You can rate only users you have a mutual chat with." });
+        }
+
+        if (!escrowDeal) {
+            return res.status(403).json({ error: "You can rate only users you have an escrow deal with." });
+        }
+
+        const trimmedComment = comment.trim();
+
         const ratingObj = await prisma.rating.upsert({
             where: {
                 reviewerId_reviewedId: {
@@ -335,12 +497,12 @@ router.post('/rate', auth, async (req, res) => {
                     reviewedId: parseInt(reviewedId)
                 }
             },
-            update: { rating: ratingVal, comment: comment || null },
+            update: { rating: ratingVal, comment: trimmedComment },
             create: {
-                reviewerId: req.user.id,
-                reviewedId: parseInt(reviewedId),
+                reviewerId: reviewerId,
+                reviewedId: reviewedUserId,
                 rating: ratingVal,
-                comment: comment || null
+                comment: trimmedComment
             }
         });
 

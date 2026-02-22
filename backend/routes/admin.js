@@ -419,7 +419,7 @@ router.get('/payouts', auth, adminOnly, async (req, res) => {
             prisma.payoutRequest.findMany({
                 where,
                 include: {
-                    user: { select: { id: true, username: true, displayName: true, email: true } }
+                    user: { select: { id: true, username: true, displayName: true, email: true, phoneNumber: true } }
                 },
                 orderBy: { requestedAt: 'desc' },
                 skip,
@@ -579,7 +579,7 @@ router.put('/payouts/:id', auth, adminOnly, async (req, res) => {
             notificationMessage = `Your payout of ₹${payout.amount.toLocaleString('en-IN')} is now being processed.`;
         }
 
-        sendUserNotification(io, payout.userId, notificationTitle, notificationMessage, notificationType);
+        sendUserNotification(io, payout.userId, notificationTitle, notificationMessage, notificationType, { type: 'wallet' });
 
         res.json(updatedPayout);
     } catch (err) {

@@ -8,43 +8,41 @@ datasource db {
 }
 
 model User {
-  id          Int       @id @default(autoincrement())
-  username    String    @unique
-  email       String    @unique
-  password    String
-  displayName String?   @map("display_name")
-  bio         String?
-  avatarUrl   String?   @map("avatar_url")
-  role        String    @default("client")
-  status      String    @default("active")
-  telegramId  String?   @map("telegram_id")
-  socialLinks Json?     @default("[]") @map("social_links")
-  verified    Boolean   @default(false)
-  createdAt   DateTime  @default(now()) @map("created_at")
-  updatedAt   DateTime  @updatedAt @map("updated_at")
-
-  sentMessages     Message[]     @relation("SentMessages")
-  receivedMessages Message[]     @relation("ReceivedMessages")
-  activities       ActivityLog[]
-  clientDeals      EscrowDeal[]  @relation("ClientDeals")
-  vendorDeals      EscrowDeal[]  @relation("VendorDeals")
-  reportsCreated   Report[]      @relation("ReportsCreated")
-  reportsReceived  Report[]      @relation("ReportsReceived")
-  blockedUsers         BlockedUser[] @relation("BlockingUser")
-  blockedBy            BlockedUser[] @relation("BlockedByUser")
-  ratingsGiven         Rating[]      @relation("RatingsGiven")
-  ratingsReceived      Rating[]      @relation("RatingsReceived")
-  verificationRequests VerificationRequest[]
-
+  id                   Int                   @id @default(autoincrement())
+  username             String                @unique
+  email                String                @unique
+  password             String
+  displayName          String?               @map("display_name")
+  bio                  String?
+  avatarUrl            String?               @map("avatar_url")
+  coverPhotoUrl        String?               @map("cover_photo_url")
+  role                 String                @default("client")
+  status               String                @default("active")
+  telegramId           String?               @map("telegram_id")
+  createdAt            DateTime              @default(now()) @map("created_at")
+  updatedAt            DateTime              @updatedAt @map("updated_at")
+  socialLinks          Json?                 @default("[]") @map("social_links")
+  verified             Boolean               @default(false)
   walletBalance        Float                 @default(0) @map("wallet_balance")
-  walletTransactions   WalletTransaction[]
-  payoutRequests       PayoutRequest[]
   razorpayContactId    String?               @map("razorpay_contact_id")
   phoneNumber          String?               @map("phone_number")
-
+  activities           ActivityLog[]
+  blockedBy            BlockedUser[]         @relation("BlockedByUser")
+  blockedUsers         BlockedUser[]         @relation("BlockingUser")
+  clientDeals          EscrowDeal[]          @relation("ClientDeals")
+  vendorDeals          EscrowDeal[]          @relation("VendorDeals")
+  receivedMessages     Message[]             @relation("ReceivedMessages")
+  sentMessages         Message[]             @relation("SentMessages")
+  notificationReads    NotificationRead[]
   sentNotifications    Notification[]        @relation("SentNotifications")
   targetNotifications  Notification[]        @relation("TargetNotifications")
-  notificationReads    NotificationRead[]
+  payoutRequests       PayoutRequest[]
+  ratingsReceived      Rating[]              @relation("RatingsReceived")
+  ratingsGiven         Rating[]              @relation("RatingsGiven")
+  reportsReceived      Report[]              @relation("ReportsReceived")
+  reportsCreated       Report[]              @relation("ReportsCreated")
+  verificationRequests VerificationRequest[]
+  walletTransactions   WalletTransaction[]
 
   @@map("users")
 }
@@ -59,14 +57,13 @@ model Message {
   attachmentUrl  String?  @map("attachment_url")
   attachmentName String?  @map("attachment_name")
   read           Boolean  @default(false)
-  isDeleted      Boolean  @default(false) @map("is_deleted")
-  isViewOnce     Boolean  @default(false) @map("is_view_once")
-  isOpened       Boolean  @default(false) @map("is_opened")
-  color          String?
   createdAt      DateTime @default(now()) @map("created_at")
-
-  sender   User @relation("SentMessages", fields: [senderId], references: [id])
-  receiver User @relation("ReceivedMessages", fields: [receiverId], references: [id])
+  isDeleted      Boolean  @default(false) @map("is_deleted")
+  isOpened       Boolean  @default(false) @map("is_opened")
+  isViewOnce     Boolean  @default(false) @map("is_view_once")
+  color          String?
+  receiver       User     @relation("ReceivedMessages", fields: [receiverId], references: [id])
+  sender         User     @relation("SentMessages", fields: [senderId], references: [id])
 
   @@map("messages")
 }
@@ -75,28 +72,25 @@ model Rating {
   id         Int      @id @default(autoincrement())
   reviewerId Int      @map("reviewer_id")
   reviewedId Int      @map("reviewed_id")
-  rating     Int      // 1 to 5
+  rating     Int
   comment    String?
   createdAt  DateTime @default(now()) @map("created_at")
-
-  reviewer   User     @relation("RatingsGiven", fields: [reviewerId], references: [id])
   reviewed   User     @relation("RatingsReceived", fields: [reviewedId], references: [id])
+  reviewer   User     @relation("RatingsGiven", fields: [reviewerId], references: [id])
 
   @@unique([reviewerId, reviewedId])
   @@map("ratings")
 }
 
-
 model Report {
-  id          Int      @id @default(autoincrement())
-  reporterId  Int      @map("reporter_id")
-  reportedId  Int      @map("reported_id")
-  reason      String
-  status      String   @default("pending") // pending, resolved, dismissed
-  createdAt   DateTime @default(now()) @map("created_at")
-
-  reporter    User     @relation("ReportsCreated", fields: [reporterId], references: [id])
-  reported    User     @relation("ReportsReceived", fields: [reportedId], references: [id])
+  id         Int      @id @default(autoincrement())
+  reporterId Int      @map("reporter_id")
+  reportedId Int      @map("reported_id")
+  reason     String
+  status     String   @default("pending")
+  createdAt  DateTime @default(now()) @map("created_at")
+  reported   User     @relation("ReportsReceived", fields: [reportedId], references: [id])
+  reporter   User     @relation("ReportsCreated", fields: [reporterId], references: [id])
 
   @@map("reports")
 }
@@ -106,9 +100,8 @@ model BlockedUser {
   blockerId Int      @map("blocker_id")
   blockedId Int      @map("blocked_id")
   createdAt DateTime @default(now()) @map("created_at")
-
-  blocker   User     @relation("BlockingUser", fields: [blockerId], references: [id])
   blocked   User     @relation("BlockedByUser", fields: [blockedId], references: [id])
+  blocker   User     @relation("BlockingUser", fields: [blockerId], references: [id])
 
   @@unique([blockerId, blockedId])
   @@map("blocked_users")
@@ -121,46 +114,43 @@ model ActivityLog {
   details   String?
   status    String   @default("active")
   createdAt DateTime @default(now()) @map("created_at")
-
-  user User @relation(fields: [userId], references: [id])
+  user      User     @relation(fields: [userId], references: [id])
 
   @@map("activity_log")
 }
 
 model EscrowDeal {
-  id                Int                  @id @default(autoincrement())
-  chatId            String               @map("chat_id")
-  clientId          Int                  @map("client_id")
-  vendorId          Int                  @map("vendor_id")
+  id                Int                 @id @default(autoincrement())
+  chatId            String              @map("chat_id")
+  clientId          Int                 @map("client_id")
+  vendorId          Int                 @map("vendor_id")
   title             String
   description       String?
+  totalAmount       Float               @map("total_amount")
+  releasedPercent   Float               @default(0) @map("released_percent")
+  status            String              @default("pending_payment")
+  createdAt         DateTime            @default(now()) @map("created_at")
+  updatedAt         DateTime            @updatedAt @map("updated_at")
+  paidAmount        Float               @default(0) @map("paid_amount")
+  paymentStatus     String              @default("pending") @map("payment_status")
+  razorpayOrderId   String?             @map("razorpay_order_id")
+  razorpayPaymentId String?             @map("razorpay_payment_id")
   terms             String?
-  totalAmount       Float                @map("total_amount")
-  releasedPercent   Float                @default(0) @map("released_percent")
-  status            String               @default("pending_payment") // pending_payment, active, completed, cancelled
-  razorpayOrderId   String?              @map("razorpay_order_id")
-  razorpayPaymentId String?              @map("razorpay_payment_id")
-  paymentStatus     String               @default("pending") @map("payment_status") // pending, paid, failed
-  paidAmount        Float                @default(0) @map("paid_amount")
-  createdAt         DateTime             @default(now()) @map("created_at")
-  updatedAt         DateTime             @updatedAt @map("updated_at")
-
-  client       User                 @relation("ClientDeals", fields: [clientId], references: [id])
-  vendor       User                 @relation("VendorDeals", fields: [vendorId], references: [id])
-  transactions EscrowTransaction[]
+  client            User                @relation("ClientDeals", fields: [clientId], references: [id])
+  vendor            User                @relation("VendorDeals", fields: [vendorId], references: [id])
+  transactions      EscrowTransaction[]
 
   @@map("escrow_deals")
 }
 
 model EscrowTransaction {
-  id        Int      @id @default(autoincrement())
-  dealId    Int      @map("deal_id")
+  id        Int        @id @default(autoincrement())
+  dealId    Int        @map("deal_id")
   percent   Float
   amount    Float
   note      String?
-  createdAt DateTime @default(now()) @map("created_at")
-
-  deal EscrowDeal @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  createdAt DateTime   @default(now()) @map("created_at")
+  deal      EscrowDeal @relation(fields: [dealId], references: [id], onDelete: Cascade)
 
   @@map("escrow_transactions")
 }
@@ -168,32 +158,31 @@ model EscrowTransaction {
 model VerificationRequest {
   id                Int       @id @default(autoincrement())
   userId            Int       @map("user_id")
-  status            String    @default("pending_payment") // pending_payment, pending, approved, rejected
+  status            String    @default("pending_payment")
   paymentAmount     Float     @map("payment_amount")
-  paymentProof      String?   @map("payment_proof") // Optional URL to payment screenshot
-  razorpayOrderId   String?   @map("razorpay_order_id")
-  razorpayPaymentId String?   @map("razorpay_payment_id")
-  paymentStatus     String    @default("pending") @map("payment_status") // pending, paid, failed
-  adminNote         String?   @map("admin_note") // Admin's reason for approval/rejection
+  paymentProof      String?   @map("payment_proof")
+  adminNote         String?   @map("admin_note")
   createdAt         DateTime  @default(now()) @map("created_at")
   reviewedAt        DateTime? @map("reviewed_at")
-
-  user User @relation(fields: [userId], references: [id])
+  paymentStatus     String    @default("pending") @map("payment_status")
+  razorpayOrderId   String?   @map("razorpay_order_id")
+  razorpayPaymentId String?   @map("razorpay_payment_id")
+  user              User      @relation(fields: [userId], references: [id])
 
   @@map("verification_requests")
 }
 
 model PaymentLog {
   id                Int      @id @default(autoincrement())
-  type              String   // escrow, verification
-  entityId          Int      @map("entity_id") // ID of EscrowDeal or VerificationRequest
+  type              String
+  entityId          Int      @map("entity_id")
   razorpayOrderId   String?  @map("razorpay_order_id")
   razorpayPaymentId String?  @unique @map("razorpay_payment_id")
   amount            Float
   currency          String   @default("INR")
-  status            String   // created, paid, failed, refunded
-  eventType         String?  @map("event_type") // webhook event type
-  metadata          Json?    // Additional payment/webhook data
+  status            String
+  eventType         String?  @map("event_type")
+  metadata          Json?
   createdAt         DateTime @default(now()) @map("created_at")
 
   @@map("payment_logs")
@@ -202,71 +191,66 @@ model PaymentLog {
 model WalletTransaction {
   id          Int      @id @default(autoincrement())
   userId      Int      @map("user_id")
-  type        String   // credit, debit, escrow_release, payout
+  type        String
   amount      Float
-  balance     Float    // Balance after transaction
-  reference   String?  // Deal ID, Payout ID, etc.
+  balance     Float
+  reference   String?
   description String
   createdAt   DateTime @default(now()) @map("created_at")
-  
-  user User @relation(fields: [userId], references: [id])
+  metadata    Json?
+  user        User     @relation(fields: [userId], references: [id])
 
   @@map("wallet_transactions")
 }
 
 model PayoutRequest {
-  id        Int      @id @default(autoincrement())
-  userId    Int      @map("user_id")
-  amount    Float
-  status    String   @default("pending") // pending, processing, completed, failed, cancelled
-  
-  // Payment method and details
-  paymentMethod String  @default("bank") @map("payment_method") // bank or upi
-  bankAccount   String? @map("bank_account")
-  ifscCode      String? @map("ifsc_code")
-  accountName   String  @map("account_name")
-  upiVpa        String? @map("upi_vpa") // UPI ID like user@paytm
-  
-  // Razorpay integration
-  razorpayPayoutId      String? @map("razorpay_payout_id")
-  razorpayFundAccountId String? @map("razorpay_fund_account_id")
-  razorpayContactId     String? @map("razorpay_contact_id")
-  
-  adminNote     String?  @map("admin_note")
-  requestedAt   DateTime @default(now()) @map("requested_at")
-  processedAt   DateTime? @map("processed_at")
-  
-  user User @relation(fields: [userId], references: [id])
+  id                    Int       @id @default(autoincrement())
+  userId                Int       @map("user_id")
+  amount                Float
+  status                String    @default("pending")
+  bankAccount           String?   @map("bank_account")
+  ifscCode              String?   @map("ifsc_code")
+  accountName           String    @map("account_name")
+  razorpayPayoutId      String?   @map("razorpay_payout_id")
+  adminNote             String?   @map("admin_note")
+  requestedAt           DateTime  @default(now()) @map("requested_at")
+  processedAt           DateTime? @map("processed_at")
+  paymentMethod         String    @default("bank") @map("payment_method")
+  razorpayContactId     String?   @map("razorpay_contact_id")
+  razorpayFundAccountId String?   @map("razorpay_fund_account_id")
+  upiVpa                String?   @map("upi_vpa")
+  phoneNumber           String?   @map("phone_number")
+  email                 String?
+  user                  User      @relation(fields: [userId], references: [id])
 
   @@map("payout_requests")
 }
 
 model Notification {
-  id           Int      @id @default(autoincrement())
+  id           Int                @id @default(autoincrement())
   title        String
   message      String
-  type         String   @default("info") // info, warning, success, alert
-  sentBy       Int?     @map("sent_by")
-  targetUserId Int?     @map("target_user_id")
+  type         String             @default("info")
+  sentBy       Int?               @map("sent_by")
+  createdAt    DateTime           @default(now()) @map("created_at")
+  targetUserId Int?               @map("target_user_id")
   color        String?
-  createdAt    DateTime @default(now()) @map("created_at")
-
-  admin      User?              @relation("SentNotifications", fields: [sentBy], references: [id])
-  targetUser User?              @relation("TargetNotifications", fields: [targetUserId], references: [id])
-  reads      NotificationRead[]
+  metadata     Json?
+  reads        NotificationRead[]
+  admin        User?              @relation("SentNotifications", fields: [sentBy], references: [id])
+  targetUser   User?              @relation("TargetNotifications", fields: [targetUserId], references: [id])
 
   @@map("notifications")
 }
 
 model NotificationRead {
-  id             Int      @id @default(autoincrement())
-  notificationId Int      @map("notification_id")
-  userId         Int      @map("user_id")
-  isDeleted      Boolean  @default(false) @map("is_deleted")
-  readAt         DateTime @default(now()) @map("read_at")
-
-  notification Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
-  user         User         @relation(fields: [userId], references: [id])
+  id             Int          @id @default(autoincrement())
+  notificationId Int          @map("notification_id")
+  userId         Int          @map("user_id")
+  readAt         DateTime     @default(now()) @map("read_at")
+  isDeleted      Boolean      @default(false) @map("is_deleted")
+  notification   Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id])
 
   @@unique([notificationId, userId])
   @@map("notification_reads")
@@ -276,7 +260,7 @@ model OtpCode {
   id        Int      @id @default(autoincrement())
   email     String
   code      String
-  type      String   // "registration" | "password_reset"
+  type      String
   expiresAt DateTime @map("expires_at")
   used      Boolean  @default(false)
   createdAt DateTime @default(now()) @map("created_at")
