@@ -56,8 +56,19 @@ import FilePreviewDialog from "@/components/chat/FilePreviewDialog";
 import NotificationBell from "@/components/NotificationBell";
 
 function formatTime(ts: string) {
-  const time = new Date(ts);
-  return time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+  if (!ts) return "";
+  try {
+    const date = new Date(ts);
+    if (isNaN(date.getTime())) return "";
+    let hours = date.getHours();
+    const minutes = date.getMinutes();
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    hours = hours % 12;
+    hours = hours ? hours : 12;
+    return `${hours}:${minutes < 10 ? '0' + minutes : minutes} ${ampm}`;
+  } catch (e) {
+    return "";
+  }
 }
 
 const EMOJIS = ["😀", "😂", "🥰", "😍", "😊", "😎", "🤔", "😅", "🔥", "👍", "❤️", "🙌", "✨", "🎉", "💯", "🙏"];
@@ -227,36 +238,34 @@ const ConversationList = ({
                 </AvatarFallback>
               </Avatar>
             </div>
-            <div className="flex-1 min-w-0 text-left">
-              <div className="grid grid-cols-[1fr_auto] items-center gap-2 mb-1">
-                <div className="flex items-center gap-1.5 min-w-0 overflow-hidden">
-                  <span className="font-medium text-foreground truncate">{chat.display_name}</span>
-                  {chat.isOfficial ? (
-                    <Badge variant="secondary" className="bg-primary/10 text-primary text-[10px] h-4 px-1.5 border-none flex items-center gap-0.5 flex-shrink-0">
-                      <ShieldCheck className="h-3 w-3" />
-                      OFFICIAL
-                    </Badge>
-                  ) : chat.chat_id.startsWith('support_') ? (
-                    <Badge variant="secondary" className="bg-indigo-100/80 text-indigo-700 text-[10px] h-4 px-1.5 border-none flex items-center gap-0.5 flex-shrink-0 dark:bg-indigo-900/30 dark:text-indigo-400">
-                      <HelpCircle className="h-3 w-3" />
-                      SUPPORT
-                    </Badge>
-                  ) : chat.verified && (
-                    <img src="/verified-badge.svg" alt="Verified" className="h-5 w-5 flex-shrink-0" />
-                  )}
-                </div>
-                <span className="text-[10px] sm:text-[11px] text-muted-foreground whitespace-nowrap shrink-0 opacity-80">
-                  {chat.last_message_time ? formatTime(chat.last_message_time) : ""}
-                </span>
-              </div>
-              <div className="flex justify-between items-center gap-2 overflow-hidden">
-                <p className="text-sm text-muted-foreground truncate flex-1 min-w-0">{chat.last_message}</p>
-                {chat.unread_count > 0 && (
-                  <Badge className="bg-primary text-primary-foreground h-5 min-w-[20px] flex items-center justify-center text-xs flex-shrink-0">
-                    {chat.unread_count}
+            <div className="flex-1 min-w-0 text-left pr-14 relative">
+              <div className="flex items-center gap-1.5 mb-1">
+                <span className="font-semibold text-foreground text-[14px] truncate leading-tight block">{chat.display_name}</span>
+                {chat.isOfficial ? (
+                  <Badge variant="secondary" className="bg-primary/10 text-primary text-[9px] h-3.5 px-1 border-none flex items-center gap-0.5 flex-shrink-0">
+                    <ShieldCheck className="h-2.5 w-2.5" />
+                    OFFICIAL
                   </Badge>
+                ) : chat.chat_id.startsWith('support_') ? (
+                  <Badge variant="secondary" className="bg-indigo-100/80 text-indigo-700 text-[9px] h-3.5 px-1 border-none flex items-center gap-0.5 flex-shrink-0 dark:bg-indigo-900/30 dark:text-indigo-400">
+                    <HelpCircle className="h-2.5 w-2.5" />
+                    SUPPORT
+                  </Badge>
+                ) : chat.verified && (
+                  <img src="/verified-badge.svg" alt="Verified" className="h-4 w-4 flex-shrink-0" />
                 )}
               </div>
+              <div className="flex items-center justify-between gap-2 overflow-hidden">
+                <p className="text-[12px] text-muted-foreground truncate flex-1 min-w-0 leading-tight">{chat.last_message}</p>
+                {chat.unread_count > 0 && (
+                  <div className="bg-primary text-primary-foreground h-4 min-w-[16px] px-1 flex items-center justify-center text-[10px] font-bold rounded-full flex-shrink-0">
+                    {chat.unread_count}
+                  </div>
+                )}
+              </div>
+              <span className="absolute right-0 top-0.5 text-[10px] text-muted-foreground font-medium whitespace-nowrap opacity-70">
+                {chat.last_message_time ? formatTime(chat.last_message_time) : ""}
+              </span>
             </div>
           </button>
         ))

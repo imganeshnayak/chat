@@ -608,18 +608,27 @@ const AdminDashboard = () => {
                             </Avatar>
                           ))}
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center justify-between gap-2">
-                            <p className="font-medium text-card-foreground text-sm truncate">
+                        <div className="flex-1 min-w-0 pr-16 relative">
+                          <div className="flex items-center gap-1.5 mb-1">
+                            <p className="font-semibold text-card-foreground text-sm truncate leading-tight block">
                               {chat.participants.map((p: any) => p.displayName).join(" & ")}
                             </p>
-                            {chat.lastMessageAt && (
-                              <span className="text-[10px] text-muted-foreground whitespace-nowrap shrink-0">
-                                {new Date(chat.lastMessageAt).toLocaleDateString([], { month: 'short', day: 'numeric' })}
-                              </span>
-                            )}
                           </div>
-                          <p className="text-xs text-muted-foreground truncate min-w-0">{chat.lastMessage || `${chat.messageCount} messages`}</p>
+                          <p className="text-[11px] text-muted-foreground truncate opacity-80 leading-tight">
+                            {chat.lastMessage || `${chat.messageCount} messages`}
+                          </p>
+                          {chat.lastMessageAt && (
+                            <span className="absolute right-0 top-0 text-[10px] text-muted-foreground font-medium whitespace-nowrap opacity-70">
+                              {(() => {
+                                const d = new Date(chat.lastMessageAt);
+                                let h = d.getHours();
+                                const m = d.getMinutes();
+                                const ap = h >= 12 ? 'PM' : 'AM';
+                                h = h % 12 || 12;
+                                return `${h}:${m < 10 ? '0' + m : m} ${ap}`;
+                              })()}
+                            </span>
+                          )}
                         </div>
                       </div>
                       <div className="flex gap-1">
