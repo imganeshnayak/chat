@@ -240,9 +240,9 @@ const ConversationList = ({
                 </AvatarFallback>
               </Avatar>
             </div>
-            <div className="flex-1 min-w-0 text-left">
-              <div className="flex justify-between items-center gap-1">
-                <div className="flex items-center gap-1.5 min-w-0 flex-1">
+            <div className="flex-1 min-w-0 text-left overflow-hidden">
+              <div className="grid grid-cols-[1fr_auto] items-center gap-2">
+                <div className="flex items-center gap-1.5 min-w-0 overflow-hidden">
                   <span className="font-medium text-foreground truncate">{chat.display_name}</span>
                   {chat.isOfficial ? (
                     <Badge variant="secondary" className="bg-primary/10 text-primary text-[10px] h-4 px-1.5 border-none flex items-center gap-0.5 flex-shrink-0">
@@ -258,7 +258,7 @@ const ConversationList = ({
                     <img src="/verified-badge.svg" alt="Verified" className="h-5 w-5 flex-shrink-0" />
                   )}
                 </div>
-                <span className="text-xs text-muted-foreground whitespace-nowrap flex-shrink-0 min-w-fit">
+                <span className="text-xs text-muted-foreground whitespace-nowrap">
                   {chat.last_message_time ? formatTime(chat.last_message_time) : ""}
                 </span>
               </div>
