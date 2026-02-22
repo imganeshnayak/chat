@@ -241,8 +241,8 @@ const ConversationList = ({
               </Avatar>
             </div>
             <div className="flex-1 min-w-0 text-left">
-              <div className="flex items-center justify-between gap-2 mb-1">
-                <div className="flex items-center gap-1.5 min-w-0 flex-1">
+              <div className="grid grid-cols-[1fr_auto] items-center gap-2 mb-1">
+                <div className="flex items-center gap-1.5 min-w-0 overflow-hidden">
                   <span className="font-medium text-foreground truncate">{chat.display_name}</span>
                   {chat.isOfficial ? (
                     <Badge variant="secondary" className="bg-primary/10 text-primary text-[10px] h-4 px-1.5 border-none flex items-center gap-0.5 flex-shrink-0">
@@ -258,12 +258,12 @@ const ConversationList = ({
                     <img src="/verified-badge.svg" alt="Verified" className="h-5 w-5 flex-shrink-0" />
                   )}
                 </div>
-                <span className="text-[11px] text-muted-foreground whitespace-nowrap shrink-0">
+                <span className="text-[10px] sm:text-[11px] text-muted-foreground whitespace-nowrap shrink-0 opacity-80">
                   {chat.last_message_time ? formatTime(chat.last_message_time) : ""}
                 </span>
               </div>
-              <div className="flex justify-between items-center gap-2">
-                <p className="text-sm text-muted-foreground truncate flex-1">{chat.last_message}</p>
+              <div className="flex justify-between items-center gap-2 overflow-hidden">
+                <p className="text-sm text-muted-foreground truncate flex-1 min-w-0">{chat.last_message}</p>
                 {chat.unread_count > 0 && (
                   <Badge className="bg-primary text-primary-foreground h-5 min-w-[20px] flex items-center justify-center text-xs flex-shrink-0">
                     {chat.unread_count}

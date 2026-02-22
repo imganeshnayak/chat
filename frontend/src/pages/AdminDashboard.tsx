@@ -608,11 +608,18 @@ const AdminDashboard = () => {
                             </Avatar>
                           ))}
                         </div>
-                        <div>
-                          <p className="font-medium text-card-foreground text-sm">
-                            {chat.participants.map((p: any) => p.displayName).join(" & ")}
-                          </p>
-                          <p className="text-xs text-muted-foreground">{chat.messageCount} messages</p>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="font-medium text-card-foreground text-sm truncate">
+                              {chat.participants.map((p: any) => p.displayName).join(" & ")}
+                            </p>
+                            {chat.lastMessageAt && (
+                              <span className="text-[10px] text-muted-foreground whitespace-nowrap shrink-0">
+                                {new Date(chat.lastMessageAt).toLocaleDateString([], { month: 'short', day: 'numeric' })}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-muted-foreground truncate min-w-0">{chat.lastMessage || `${chat.messageCount} messages`}</p>
                         </div>
                       </div>
                       <div className="flex gap-1">
