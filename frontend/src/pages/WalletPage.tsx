@@ -5,11 +5,17 @@ import { getWalletBalance, getWalletTransactions, getPayoutRequests, WalletTrans
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowUpRight, ArrowDownLeft, Wallet, Clock, CheckCircle2, XCircle, AlertCircle, Loader2 } from "lucide-react";
+import { ArrowUpRight, ArrowDownLeft, Wallet, Clock, CheckCircle2, XCircle, AlertCircle, Loader2, ChevronDown } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import RequestPayoutDialog from "@/components/chat/RequestPayoutDialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Info, Plus } from "lucide-react";
 import { initiateWalletTopup, verifyPayment } from "@/lib/api";
 import { Input } from "@/components/ui/input";
@@ -267,19 +273,25 @@ const WalletPage = () => {
                                     <CardTitle>Transaction History</CardTitle>
                                     <CardDescription>Recent activity in your wallet</CardDescription>
                                 </div>
-                                <div className="flex gap-1 overflow-x-auto pb-1 max-w-[200px] md:max-w-none">
-                                    {["all", "sent", "received", "added"].map((t) => (
-                                        <Button
-                                            key={t}
-                                            variant={filterType === t ? "default" : "outline"}
-                                            size="sm"
-                                            className="text-[10px] h-7 capitalize px-2"
-                                            onClick={() => setFilterType(t)}
-                                        >
-                                            {t}
+                                <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                        <Button variant="outline" size="sm" className="h-8 gap-1 capitalize">
+                                            {filterType}
+                                            <ChevronDown className="h-4 w-4" />
                                         </Button>
-                                    ))}
-                                </div>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end">
+                                        {["all", "sent", "received", "added"].map((t) => (
+                                            <DropdownMenuItem
+                                                key={t}
+                                                className="capitalize"
+                                                onClick={() => setFilterType(t)}
+                                            >
+                                                {t}
+                                            </DropdownMenuItem>
+                                        ))}
+                                    </DropdownMenuContent>
+                                </DropdownMenu>
                             </div>
                         </CardHeader>
                         <CardContent>
