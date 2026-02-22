@@ -241,16 +241,16 @@ const ConversationList = ({
               </Avatar>
             </div>
             <div className="flex-1 min-w-0 text-left">
-              <div className="flex justify-between items-center gap-2 mb-1">
-                <div className="flex items-center gap-1.5 min-w-0">
+              <div className="flex justify-between items-center gap-1">
+                <div className="flex items-center gap-1.5 min-w-0 flex-1">
                   <span className="font-medium text-foreground truncate">{chat.display_name}</span>
                   {chat.isOfficial ? (
-                    <Badge variant="secondary" className="bg-primary/10 text-primary text-[10px] h-4 px-1.5 border-none flex items-center gap-0.5">
+                    <Badge variant="secondary" className="bg-primary/10 text-primary text-[10px] h-4 px-1.5 border-none flex items-center gap-0.5 flex-shrink-0">
                       <ShieldCheck className="h-3 w-3" />
                       OFFICIAL
                     </Badge>
                   ) : chat.chat_id.startsWith('support_') ? (
-                    <Badge variant="secondary" className="bg-indigo-100/80 text-indigo-700 text-[10px] h-4 px-1.5 border-none flex items-center gap-0.5 dark:bg-indigo-900/30 dark:text-indigo-400">
+                    <Badge variant="secondary" className="bg-indigo-100/80 text-indigo-700 text-[10px] h-4 px-1.5 border-none flex items-center gap-0.5 flex-shrink-0 dark:bg-indigo-900/30 dark:text-indigo-400">
                       <HelpCircle className="h-3 w-3" />
                       SUPPORT
                     </Badge>
@@ -258,7 +258,7 @@ const ConversationList = ({
                     <img src="/verified-badge.svg" alt="Verified" className="h-5 w-5 flex-shrink-0" />
                   )}
                 </div>
-                <span className="text-xs text-muted-foreground whitespace-nowrap flex-shrink-0">
+                <span className="text-xs text-muted-foreground whitespace-nowrap flex-shrink-0 min-w-fit">
                   {chat.last_message_time ? formatTime(chat.last_message_time) : ""}
                 </span>
               </div>
