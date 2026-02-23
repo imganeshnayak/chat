@@ -75,7 +75,7 @@ router.post('/register', async (req, res) => {
         });
 
         if (!otpRecord || !(await bcrypt.compare(otp, otpRecord.code))) {
-            return res.status(400).json({ error: 'Invalid or expired OTP. Please request a new one.' });
+            return res.status(401).json({ error: 'Invalid credentials.' });
         }
 
         // Potential race condition: OTP marked used atomically
@@ -191,9 +191,9 @@ router.post('/forgot-password', async (req, res) => {
         if (!email) return res.status(400).json({ error: 'Email is required.' });
 
         const user = await prisma.user.findUnique({ where: { email } });
-        // Always return success to prevent email enumeration
+        // Return 401 if user not found to help user identify wrong email
         if (!user) {
-            return res.json({ success: true, message: 'If this email exists, a reset code has been sent.' });
+            return res.status(401).json({ error: 'Invalid credentials.' });
         }
 
         // Invalidate previous reset OTPs
@@ -215,7 +215,7 @@ router.post('/forgot-password', async (req, res) => {
 
         await sendPasswordResetOtp(email, otp);
 
-        res.json({ success: true, message: 'If this email exists, a reset code has been sent.' });
+        res.json({ success: true, message: 'A reset code has been sent to your email.' });
     } catch (err) {
         console.error('Forgot password error:', err);
         res.status(500).json({ error: 'Failed to send reset email.' });
@@ -241,7 +241,7 @@ router.post('/verify-reset-otp', async (req, res) => {
         });
 
         if (!otpRecord || !(await bcrypt.compare(otp, otpRecord.code))) {
-            return res.status(400).json({ error: 'Invalid or expired OTP.' });
+            return res.status(401).json({ error: 'Invalid credentials.' });
         }
 
         // Potential race condition: Mark OTP as used immediately after verification

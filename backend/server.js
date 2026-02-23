@@ -23,45 +23,31 @@ dotenv.config();
 
 const app = express();
 const server = createServer(app);
-const io = new Server(server, {
-    cors: {
-        origin: (origin, callback) => {
-            const allowedOrigins = [
-                'http://localhost:5173',
-                'http://localhost:8080',
-                'http://127.0.0.1:5173',
-                'http://127.0.0.1:8080',
-                process.env.FRONTEND_URL
-            ].filter(Boolean);
-            if (!origin || allowedOrigins.includes(origin)) {
-                callback(null, true);
-            } else {
-                callback(new Error('Not allowed by CORS'));
-            }
-        },
-        methods: ['GET', 'POST', 'PUT', 'DELETE'],
-        credentials: true
-    },
-});
+const allowedOrigins = [
+    'http://localhost:5173',
+    'http://localhost:8080',
+    'http://127.0.0.1:5173',
+    'http://127.0.0.1:8080',
+    process.env.FRONTEND_URL
+].filter(Boolean);
 
 // Middleware
 app.use(cors({
     origin: (origin, callback) => {
-        const allowedOrigins = [
-            'http://localhost:5173',
-            'http://localhost:8080',
-            'http://127.0.0.1:5173',
-            'http://127.0.0.1:8080',
-            process.env.FRONTEND_URL
-        ].filter(Boolean);
-        if (!origin || allowedOrigins.includes(origin)) {
+        // Allow requests with no origin (like mobile apps/curl)
+        if (!origin) return callback(null, true);
+
+        if (allowedOrigins.includes(origin)) {
             callback(null, true);
         } else {
+            console.error(`🚫 CORS blocked for origin: ${origin}`);
             callback(new Error('Not allowed by CORS'));
         }
     },
     credentials: true,
+    optionsSuccessStatus: 200
 }));
+
 app.use(express.json({
     verify: (req, res, buf) => {
         req.rawBody = buf;
@@ -69,10 +55,19 @@ app.use(express.json({
 }));
 app.use(express.urlencoded({ extended: true }));
 
-// API Routes
-// Webhooks (before other routes, no auth needed)
+// Webhooks (no auth needed)
 app.use('/webhooks', webhookRoutes);
 
+// Socket.IO setup with shared server
+const io = new Server(server, {
+    cors: {
+        origin: allowedOrigins,
+        methods: ['GET', 'POST', 'PUT', 'DELETE'],
+        credentials: true
+    },
+});
+
+// API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/messages', messageRoutes);

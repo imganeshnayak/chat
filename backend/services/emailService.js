@@ -59,6 +59,7 @@ export async function sendRegistrationOtp(email, otp) {
     subject: `${otp} is your Vesper verification code`,
     html,
   });
+  console.log(`✉️ Registration OTP sent to ${email}`);
 }
 
 /**
@@ -95,4 +96,5 @@ export async function sendPasswordResetOtp(email, otp) {
     subject: `${otp} is your Vesper password reset code`,
     html,
   });
+  console.log(`✉️ Password reset OTP sent to ${email}`);
 }
