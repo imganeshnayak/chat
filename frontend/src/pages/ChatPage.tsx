@@ -506,7 +506,7 @@ const ChatView = ({
       )}
 
       {/* Chat header */}
-      <div className={`flex items-center gap-3 p-4 border-b border-border z-20 bg-background/95 backdrop-blur-md min-h-[73px] ${isMobile ? 'fixed top-0 left-0 right-0' : 'sticky top-0'}`}>
+      <div className="flex items-center gap-3 p-4 border-b border-border z-20 bg-background/95 backdrop-blur-md min-h-[73px] flex-shrink-0">
         {isSelectionMode ? (
           <div className="flex items-center justify-between w-full">
             <div className="flex items-center gap-4">
@@ -602,7 +602,7 @@ const ChatView = ({
       </div>
 
       {/* Messages */}
-      <div className={`flex-1 relative overflow-hidden min-h-0 bg-background ${isMobile ? 'mt-[73px]' : ''}`} data-nocontext>
+      <div className="flex-1 relative overflow-hidden min-h-0 bg-background" data-nocontext>
 
         <div
           className="h-full overflow-y-auto scrollbar-thin scrollbar-thumb-primary/20 scroll-smooth relative z-10"
@@ -611,7 +611,7 @@ const ChatView = ({
           <div
             className="px-4 pt-4 pb-2 space-y-1 chat-message-container privacy-protected"
             style={{
-              marginBottom: isMobile ? inputBarHeight + 12 : undefined
+              marginBottom: 12
             }}
           >
             {messages.length === 0 ? (
@@ -862,16 +862,7 @@ const ChatView = ({
       {/* Input */}
       <div
         ref={inputBarRef}
-        className="p-3 border-t border-border bg-background"
-        style={{
-          position: isMobile ? 'fixed' : 'static',
-          left: 0,
-          right: 0,
-          bottom: isMobile ? 0 : 'auto',
-          zIndex: isMobile ? 50 : 'auto',
-          width: isMobile ? '100vw' : 'auto',
-          maxWidth: isMobile ? '100vw' : 'none',
-        }}
+        className="p-3 border-t border-border bg-background flex-shrink-0"
       >
         {selectedChat?.isOfficial && botState === 'IDLE' && (
           <div className="flex flex-wrap gap-2 mb-3">
@@ -1864,7 +1855,7 @@ const ChatPage = () => {
   // Mobile: show one panel at a time
   if (isMobile) {
     return (
-      <div className={`${selectedChat ? 'h-[100dvh]' : 'h-[calc(100dvh-64px)]'} overflow-hidden`}>
+      <div className={`${selectedChat ? 'h-[100dvh]' : 'h-[calc(100dvh-64px)]'} overflow-hidden flex flex-col`}>
         {selectedChat ? (
           <ChatView
             selectedChat={selectedChat}

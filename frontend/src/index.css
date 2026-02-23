@@ -53,12 +53,17 @@
     @apply border-border;
   }
 
+  html, body, #root {
+    height: 100%;
+    min-height: 100%;
+  }
+
   body {
     @apply bg-background text-foreground;
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    scroll-behavior: smooth;
+    overflow-x: hidden;
   }
 
   h1,
