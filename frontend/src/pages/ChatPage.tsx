@@ -133,7 +133,7 @@ const ConversationList = ({
   return (
     <div className="flex flex-col h-full min-h-0 bg-background overflow-hidden font-inter">
       {/* Header */}
-      <div className="p-4 border-b border-border sticky top-0 z-10 bg-background/95 backdrop-blur-md">
+      <div className="p-4 border-b border-border bg-background/95 backdrop-blur-md flex-shrink-0 z-20">
         <div className="flex items-center justify-between">
           {!isSearchVisible ? (
             <h1 className="text-xl font-bold text-foreground tracking-tight">Chats</h1>
@@ -505,8 +505,8 @@ const ChatView = ({
         </div>
       )}
 
-      {/* Chat header */}
-      <div className="flex items-center gap-3 p-4 border-b border-border sticky top-0 z-20 bg-background/95 backdrop-blur-md min-h-[73px]">
+      {/* Chat header - Flex shrink 0 to stay in place */}
+      <div className="flex items-center gap-3 p-4 border-b border-border bg-background/95 backdrop-blur-md min-h-[73px] flex-shrink-0 z-30">
         {isSelectionMode ? (
           <div className="flex items-center justify-between w-full">
             <div className="flex items-center gap-4">
@@ -609,10 +609,7 @@ const ChatView = ({
           data-nocontext
         >
           <div
-            className="px-4 pt-4 pb-2 space-y-1 chat-message-container privacy-protected"
-            style={{
-              marginBottom: isMobile ? inputBarHeight + 12 : undefined
-            }}
+            className="px-4 pt-4 pb-4 space-y-1 chat-message-container privacy-protected"
           >
             {messages.length === 0 ? (
               <div className="text-center text-muted-foreground py-8">Start a conversation</div>
@@ -859,19 +856,10 @@ const ChatView = ({
         </div>
       </div>
 
-      {/* Input */}
+      {/* Input - Flex shrink 0 to stay at bottom */}
       <div
         ref={inputBarRef}
-        className="p-3 border-t border-border bg-background"
-        style={{
-          position: isMobile ? 'fixed' : 'static',
-          left: 0,
-          right: 0,
-          bottom: isMobile ? 0 : 'auto',
-          zIndex: isMobile ? 50 : 'auto',
-          width: isMobile ? '100vw' : 'auto',
-          maxWidth: isMobile ? '100vw' : 'none',
-        }}
+        className="p-3 border-t border-border bg-background flex-shrink-0 z-30"
       >
         {selectedChat?.isOfficial && botState === 'IDLE' && (
           <div className="flex flex-wrap gap-2 mb-3">
