@@ -506,7 +506,7 @@ const ChatView = ({
       )}
 
       {/* Chat header */}
-      <div className="flex items-center gap-3 p-4 border-b border-border sticky top-0 z-20 bg-background/95 backdrop-blur-md min-h-[73px]">
+      <div className={`flex items-center gap-3 p-4 border-b border-border z-20 bg-background/95 backdrop-blur-md min-h-[73px] ${isMobile ? 'fixed top-0 left-0 right-0' : 'sticky top-0'}`}>
         {isSelectionMode ? (
           <div className="flex items-center justify-between w-full">
             <div className="flex items-center gap-4">
@@ -602,7 +602,7 @@ const ChatView = ({
       </div>
 
       {/* Messages */}
-      <div className="flex-1 relative overflow-hidden min-h-0 bg-background" data-nocontext>
+      <div className={`flex-1 relative overflow-hidden min-h-0 bg-background ${isMobile ? 'mt-[73px]' : ''}`} data-nocontext>
 
         <div
           className="h-full overflow-y-auto scrollbar-thin scrollbar-thumb-primary/20 scroll-smooth relative z-10"
