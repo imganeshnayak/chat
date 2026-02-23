@@ -40,9 +40,19 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import {
+  Drawer,
+  DrawerClose,
+  DrawerContent,
+  DrawerDescription,
+  DrawerFooter,
+  DrawerHeader,
+  DrawerTitle,
+} from "@/components/ui/drawer";
+import {
   getChatList, getMessages, sendMessage, markMessagesAsRead, uploadFile,
   searchUsers, blockUser, reportUser, clearChatHistory, getUser,
   deleteMessage, deleteMessagesBatch, getSupportChat, openViewOnceMessage,
+  getBestProfiles,
   Chat as ChatType, Message as MessageType, AuthUser
 } from "@/lib/api";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -306,7 +316,12 @@ const ChatView = ({
   isPreviewViewOnce,
   setIsPreviewViewOnce,
   currentAcceptType,
-  setCurrentAcceptType
+  setCurrentAcceptType,
+  botState,
+  setBotState,
+  botData,
+  setBotData,
+  setMessages,
 }: {
   selectedChat: ChatType | null;
   setSelectedChat: (chat: ChatType | null) => void;
@@ -321,13 +336,18 @@ const ChatView = ({
   messageInputRef: React.RefObject<HTMLInputElement>;
   fileInputRef: React.RefObject<HTMLInputElement>;
   handleFileSelect: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  onMessageDeleted: (messageId: number) => void;
+  onMessageDeleted: (messageId: number, type?: 'me' | 'everyone') => void;
   selectedMessages: number[];
   setSelectedMessages: (ids: number[]) => void;
-  onDeleteMessagesBatch: (ids: number[]) => void;
+  onDeleteMessagesBatch: (ids: number[], type?: 'me' | 'everyone') => void;
   pendingFile: File | null;
   setPendingFile: (file: File | null) => void;
   handleConfirmUpload: (caption: string, viewOnce: boolean) => void;
+  botState: 'IDLE' | 'AWAITING_CITY' | 'AWAITING_PINCODE' | 'SEARCHING';
+  setBotState: (state: 'IDLE' | 'AWAITING_CITY' | 'AWAITING_PINCODE' | 'SEARCHING') => void;
+  botData: { city?: string; pincode?: string };
+  setBotData: (data: { city?: string; pincode?: string } | ((prev: { city?: string; pincode?: string }) => { city?: string; pincode?: string })) => void;
+  setMessages: React.Dispatch<React.SetStateAction<MessageType[]>>;
   isLoading: boolean;
   isBlurred: boolean;
   setIsBlurred: (val: boolean) => void;
@@ -339,6 +359,9 @@ const ChatView = ({
   const [isHoldingView, setIsHoldingView] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const inputBarRef = useRef<HTMLDivElement | null>(null);
+  const [inputBarHeight, setInputBarHeight] = useState(0);
+  const [activeMessageMenu, setActiveMessageMenu] = useState<MessageType | null>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -362,13 +385,14 @@ const ChatView = ({
 
   const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  const onTouchStart = (messageId: number) => {
-    if (!isMobile) return;
+  const onTouchStart = (msg: MessageType) => {
+    if (!isMobile || isSelectionMode) return;
     // Clear any existing timer just in case
     if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
 
     longPressTimerRef.current = setTimeout(() => {
-      toggleMessageSelection(messageId);
+      // Logic for Instagram-like long press: show action menu
+      setActiveMessageMenu(msg);
       longPressTimerRef.current = null;
     }, 500);
   };
@@ -392,6 +416,20 @@ const ChatView = ({
       scrollingRef.current = false;
     }
   }, [messages.length, selectedChat?.chat_id]);
+
+  // Measure input bar height on mount/resize to avoid overlap / large gaps on mobile
+  useEffect(() => {
+    const measure = () => {
+      const h = inputBarRef.current ? inputBarRef.current.getBoundingClientRect().height : 0;
+      setInputBarHeight(h || 0);
+      // after resizing, keep view attached to bottom
+      setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'auto' }), 50);
+    };
+
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, []);
 
   const handleOpenViewOnce = async (msg: MessageType) => {
     if (msg.senderId === user?.id) return; // Don't handle opening for sender (local only)
@@ -445,14 +483,35 @@ const ChatView = ({
               <h3 className="font-semibold text-lg">{selectedMessages.length}</h3>
             </div>
             <div className="flex items-center gap-2">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => onDeleteMessagesBatch(selectedMessages)}
-                className="text-destructive hover:text-destructive hover:bg-destructive/10"
-              >
-                <Trash2 className="h-5 w-5" />
-              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                  >
+                    <Trash2 className="h-5 w-5" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56 bg-background border-border">
+                  <DropdownMenuItem
+                    onClick={() => onDeleteMessagesBatch(selectedMessages, 'me')}
+                    className="cursor-pointer gap-2"
+                  >
+                    <EyeOff className="h-4 w-4" />
+                    <span>Delete for Me</span>
+                  </DropdownMenuItem>
+                  {(user?.role === 'admin' || selectedMessages.every(id => messages.find(m => m.id === id)?.senderId === user?.id)) && (
+                    <DropdownMenuItem
+                      onClick={() => onDeleteMessagesBatch(selectedMessages, 'everyone')}
+                      className="text-destructive focus:text-destructive cursor-pointer gap-2"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      <span>Delete for Everyone</span>
+                    </DropdownMenuItem>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </div>
         ) : (
@@ -482,24 +541,26 @@ const ChatView = ({
                 {selectedChat.isOfficial ? "Official Support Channel" : `@${selectedChat.username}`}
               </p>
             </div>
-            <div className="flex gap-1">
-              <Button variant="ghost" size="icon" onClick={() => navigate(`/profile/${selectedChat.username}`)}>
-                <UserIcon className="h-5 w-5" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => navigate(`/escrow?chatId=${selectedChat.chat_id}&vendorId=${selectedChat.user_id}&vendorUsername=${selectedChat.username}`)}
-                title="Escrow"
-              >
-                <span className="text-lg font-bold text-primary">₹</span>
-              </Button>
-              <ChatMoreMenu
-                chatId={selectedChat.chat_id}
-                userInfo={{ id: selectedChat.user_id, displayName: selectedChat.display_name }}
-                onChatCleared={() => setSelectedChat(null)}
-              />
-            </div>
+            {!(selectedChat.isOfficial && user?.role !== 'admin') && (
+              <div className="flex gap-1">
+                <Button variant="ghost" size="icon" onClick={() => navigate(`/profile/${selectedChat.username}`)}>
+                  <UserIcon className="h-5 w-5" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => navigate(`/escrow?chatId=${selectedChat.chat_id}&vendorId=${selectedChat.user_id}&vendorUsername=${selectedChat.username}`)}
+                  title="Escrow"
+                >
+                  <span className="text-lg font-bold text-primary">₹</span>
+                </Button>
+                <ChatMoreMenu
+                  chatId={selectedChat.chat_id}
+                  userInfo={{ id: selectedChat.user_id, displayName: selectedChat.display_name }}
+                  onChatCleared={() => setSelectedChat(null)}
+                />
+              </div>
+            )}
           </>
         )}
       </div>
@@ -514,7 +575,7 @@ const ChatView = ({
           <div
             className="px-4 pt-4 pb-2 space-y-1 chat-message-container privacy-protected"
             style={{
-              marginBottom: (typeof window !== 'undefined' && window.innerWidth <= 600) ? 50 : undefined
+              marginBottom: isMobile ? inputBarHeight + 12 : undefined
             }}
           >
             {messages.length === 0 ? (
@@ -546,11 +607,13 @@ const ChatView = ({
                     <div
                       className={`flex ${isMine ? "justify-end" : "justify-start"} items-center gap-2 group relative chat-message privacy-protected ${selectedMessages.includes(msg.id) ? "bg-primary/10 -mx-4 px-4 py-1" : ""}`}
                       onClick={() => handleMessageClick(msg)}
-                      onTouchStart={() => onTouchStart(msg.id)}
+                      onTouchStart={() => onTouchStart(msg)}
                       onTouchEnd={onTouchEnd}
                       onContextMenu={(e) => {
                         e.preventDefault();
-                        if (isMobile) {
+                        if (isMobile && !isSelectionMode) {
+                          setActiveMessageMenu(msg);
+                        } else if (isMobile && isSelectionMode) {
                           toggleMessageSelection(msg.id);
                         }
                       }}
@@ -571,16 +634,26 @@ const ChatView = ({
                                 <MoreVertical className="h-4 w-4 text-muted-foreground" />
                               </Button>
                             </DropdownMenuTrigger>
-                            <DropdownMenuContent align={isMine ? "end" : "start"} className="w-32 bg-card border-border">
-                              {isMine && (
+                            <DropdownMenuContent align={isMine ? "end" : "start"} className="w-56 bg-card border-border">
+                              <DropdownMenuItem
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onMessageDeleted(msg.id, 'me');
+                                }}
+                                className="gap-2 cursor-pointer"
+                              >
+                                <EyeOff className="h-4 w-4" /> Delete for Me
+                              </DropdownMenuItem>
+
+                              {(isMine || user?.role === 'admin') && (
                                 <DropdownMenuItem
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    onMessageDeleted(msg.id);
+                                    onMessageDeleted(msg.id, 'everyone');
                                   }}
-                                  className="text-destructive focus:text-destructive"
+                                  className="text-destructive focus:text-destructive gap-2 cursor-pointer"
                                 >
-                                  <Trash2 className="mr-2 h-4 w-4" /> Delete
+                                  <Trash2 className="h-4 w-4" /> Delete for Everyone
                                 </DropdownMenuItem>
                               )}
                               <DropdownMenuItem
@@ -752,6 +825,7 @@ const ChatView = ({
 
       {/* Input */}
       <div
+        ref={inputBarRef}
         className="p-3 border-t border-border bg-background"
         style={{
           position: isMobile ? 'fixed' : 'static',
@@ -763,6 +837,64 @@ const ChatView = ({
           maxWidth: isMobile ? '100vw' : 'none',
         }}
       >
+        {selectedChat?.isOfficial && botState === 'IDLE' && (
+          <div className="flex flex-wrap gap-2 mb-3">
+            <button
+              onClick={() => {
+                setBotState('AWAITING_CITY');
+                const botReply: MessageType = {
+                  id: Date.now(),
+                  senderId: selectedChat.user_id,
+                  receiverId: user?.id || 0,
+                  chatId: selectedChat.chat_id,
+                  content: "I can help you find the best verified profiles! 🌟 First, could you please tell me your City name?",
+                  messageType: 'text',
+                  read: true,
+                  createdAt: new Date().toISOString()
+                };
+                setMessages(prev => [...prev, botReply]);
+              }}
+              className="bg-primary/10 hover:bg-primary/20 text-primary text-xs font-bold px-3 py-1.5 rounded-full border border-primary/20 transition-all active:scale-95"
+            >
+              Suggest me the best profiles 👤
+            </button>
+            <button
+              onClick={() => {
+                const botReply: MessageType = {
+                  id: Date.now(),
+                  senderId: selectedChat.user_id,
+                  receiverId: user?.id || 0,
+                  chatId: selectedChat.chat_id,
+                  content: "To get verified, please go to your Profile settings and click on 'Verify Account'. Professional verification ensures trust in our community!",
+                  messageType: 'text',
+                  read: true,
+                  createdAt: new Date().toISOString()
+                };
+                setMessages(prev => [...prev, botReply]);
+              }}
+              className="bg-secondary hover:bg-secondary/80 text-foreground text-xs font-semibold px-3 py-1.5 rounded-full border border-border transition-all active:scale-95"
+            >
+              How to get verified? 🛡️
+            </button>
+          </div>
+        )}
+        {botState !== 'IDLE' && (
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[10px] uppercase tracking-widest font-bold text-primary animate-pulse flex items-center gap-1.5">
+              <span className="h-1.5 w-1.5 rounded-full bg-primary" />
+              Bot: {botState === 'AWAITING_CITY' ? "Awaiting City..." : botState === 'AWAITING_PINCODE' ? "Awaiting Pincode..." : "Searching Profiles..."}
+            </span>
+            <button
+              onClick={() => {
+                setBotState('IDLE');
+                setBotData({});
+              }}
+              className="text-[10px] text-muted-foreground hover:text-destructive font-bold uppercase tracking-tighter"
+            >
+              Cancel
+            </button>
+          </div>
+        )}
         {error && (
           <div className="text-sm text-destructive bg-destructive/10 p-2 rounded mb-2">
             {error}
@@ -911,6 +1043,62 @@ const ChatView = ({
         onSend={handleConfirmUpload}
         isUploading={isLoading}
       />
+
+      {/* Message Action Drawer for Mobile (Instagram style) */}
+      <Drawer open={!!activeMessageMenu} onOpenChange={(open) => !open && setActiveMessageMenu(null)}>
+        <DrawerContent className="bg-background border-border pb-8">
+          <DrawerHeader className="pb-2 border-b border-border mb-4">
+            <DrawerTitle className="text-center text-sm font-bold opacity-70">Message Options</DrawerTitle>
+          </DrawerHeader>
+          <div className="px-4 space-y-3">
+            {!activeMessageMenu?.isDeleted && (
+              <>
+                <Button
+                  variant="ghost"
+                  className="w-full justify-start text-foreground hover:bg-secondary h-14 text-lg font-semibold rounded-2xl px-6"
+                  onClick={() => {
+                    if (activeMessageMenu) onMessageDeleted(activeMessageMenu.id, 'me');
+                    setActiveMessageMenu(null);
+                  }}
+                >
+                  <EyeOff className="mr-4 h-6 w-6" /> Delete for Me
+                </Button>
+
+                {(activeMessageMenu?.senderId === user?.id || user?.role === 'admin') && (
+                  <Button
+                    variant="ghost"
+                    className="w-full justify-start text-destructive hover:text-destructive hover:bg-destructive/10 h-14 text-lg font-semibold rounded-2xl px-6"
+                    onClick={() => {
+                      if (activeMessageMenu) onMessageDeleted(activeMessageMenu.id, 'everyone');
+                      setActiveMessageMenu(null);
+                    }}
+                  >
+                    <Trash2 className="mr-4 h-6 w-6" /> Delete for Everyone
+                  </Button>
+                )}
+              </>
+            )}
+            <Button
+              variant="ghost"
+              className="w-full justify-start h-14 text-lg font-semibold rounded-2xl px-6 text-foreground"
+              onClick={() => {
+                if (activeMessageMenu) toggleMessageSelection(activeMessageMenu.id);
+                setActiveMessageMenu(null);
+              }}
+            >
+              <CheckCircle2 className="mr-4 h-6 w-6" /> Select More
+            </Button>
+            <DrawerClose asChild>
+              <Button
+                variant="secondary"
+                className="w-full h-14 text-lg font-semibold rounded-2xl px-6 bg-secondary text-secondary-foreground"
+              >
+                <X className="mr-4 h-6 w-6" /> Cancel
+              </Button>
+            </DrawerClose>
+          </div>
+        </DrawerContent>
+      </Drawer>
     </div>
   );
 };
@@ -1089,6 +1277,8 @@ const ChatPage = () => {
   const [newMessage, setNewMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
+  const [botState, setBotState] = useState<'IDLE' | 'AWAITING_CITY' | 'AWAITING_PINCODE' | 'SEARCHING'>('IDLE');
+  const [botData, setBotData] = useState<{ city?: string; pincode?: string }>({});
   const [error, setError] = useState("");
   const messageInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -1384,6 +1574,102 @@ const ChatPage = () => {
     const messageToSend = newMessage;
     setNewMessage("");
 
+    // Bot Logic
+    if (selectedChat?.isOfficial) {
+      if (botState === 'AWAITING_CITY') {
+        setBotData(prev => ({ ...prev, city: messageToSend }));
+        setBotState('AWAITING_PINCODE');
+
+        // Add user message to UI immediately for better UX
+        const userMsg: MessageType = {
+          id: Date.now(),
+          senderId: user.id,
+          receiverId: selectedChat.user_id,
+          chatId: selectedChat.chat_id,
+          content: messageToSend,
+          messageType: 'text',
+          read: true,
+          createdAt: new Date().toISOString()
+        };
+        setMessages(prev => [...prev, userMsg]);
+
+        // Add Bot reply
+        setTimeout(() => {
+          const botReply: MessageType = {
+            id: Date.now() + 1,
+            senderId: selectedChat.user_id,
+            receiverId: user.id,
+            chatId: selectedChat.chat_id,
+            content: "Great! Now please enter your Pincode to narrow down results.",
+            messageType: 'text',
+            read: true,
+            createdAt: new Date().toISOString()
+          };
+          setMessages(prev => [...prev, botReply]);
+        }, 600);
+        return;
+      } else if (botState === 'AWAITING_PINCODE') {
+        setBotData(prev => ({ ...prev, pincode: messageToSend }));
+        setBotState('SEARCHING');
+
+        // Add user message
+        const userMsg: MessageType = {
+          id: Date.now(),
+          senderId: user.id,
+          receiverId: selectedChat.user_id,
+          chatId: selectedChat.chat_id,
+          content: messageToSend,
+          messageType: 'text',
+          read: true,
+          createdAt: new Date().toISOString()
+        };
+        setMessages(prev => [...prev, userMsg]);
+
+        // Trigger Search
+        setTimeout(async () => {
+          try {
+            const results = await getBestProfiles({ city: botData.city, pincode: messageToSend });
+            setBotState('IDLE');
+            setBotData({});
+
+            let content = "";
+            if (results.length === 0) {
+              content = "I couldn't find any verified profiles in that location. 😔";
+            } else {
+              content = `I found ${results.length} verified profile(s) for you! 🌟\n\n` +
+                results.map(u => `• @${u.username} (${u.displayName || 'No Name'})${u.city ? ` in ${u.city}` : ''}`).join('\n');
+            }
+
+            const botReply: MessageType = {
+              id: Date.now() + 2,
+              senderId: selectedChat.user_id,
+              receiverId: user.id,
+              chatId: selectedChat.chat_id,
+              content: content,
+              messageType: 'text',
+              read: true,
+              createdAt: new Date().toISOString()
+            };
+            setMessages(prev => [...prev, botReply]);
+          } catch (err) {
+            setBotState('IDLE');
+            const botReply: MessageType = {
+              id: Date.now() + 2,
+              senderId: selectedChat.user_id,
+              receiverId: user.id,
+              chatId: selectedChat.chat_id,
+              content: "Sorry, I encountered an error while searching. Please try again later.",
+              messageType: 'text',
+              read: true,
+              createdAt: new Date().toISOString()
+            };
+            setMessages(prev => [...prev, botReply]);
+          }
+        }, 1000);
+        return;
+      }
+    }
+
     try {
       await sendMessage({
         receiver_id: selectedChat.user_id,
@@ -1409,21 +1695,27 @@ const ChatPage = () => {
     }
   }, [newMessage, selectedChat, user, loadMessages, loadChats]);
 
-  const handleMessageDeleted = useCallback(async (messageId: number) => {
+  const handleMessageDeleted = useCallback(async (messageId: number, type: 'me' | 'everyone' = 'me') => {
     try {
-      await deleteMessage(messageId);
-      toast({ title: "Message Deleted", description: "Your message has been deleted." });
+      await deleteMessage(messageId, type);
+      toast({
+        title: type === 'me' ? "Deleted for You" : "Deleted for Everyone",
+        description: type === 'me' ? "Message hidden from your view." : "Message has been deleted."
+      });
       if (selectedChat) loadMessages(selectedChat.chat_id);
     } catch (err) {
       toast({ title: "Error", description: err instanceof Error ? err.message : "Failed to delete message", variant: "destructive" });
     }
   }, [selectedChat, loadMessages, toast]);
 
-  const handleDeleteMessagesBatch = useCallback(async (ids: number[]) => {
+  const handleDeleteMessagesBatch = useCallback(async (ids: number[], type: 'me' | 'everyone' = 'me') => {
     if (ids.length === 0) return;
     try {
-      await deleteMessagesBatch(ids);
-      toast({ title: "Messages Deleted", description: `${ids.length} messages have been deleted.` });
+      await deleteMessagesBatch(ids, type);
+      toast({
+        title: type === 'me' ? "Deleted for You" : "Deleted for Everyone",
+        description: `${ids.length} messages have been deleted.`
+      });
       setSelectedMessages([]);
       if (selectedChat) loadMessages(selectedChat.chat_id);
     } catch (err) {
@@ -1566,6 +1858,11 @@ const ChatPage = () => {
             setIsPreviewViewOnce={setIsPreviewViewOnce}
             currentAcceptType={currentAcceptType}
             setCurrentAcceptType={setCurrentAcceptType}
+            botState={botState}
+            setBotState={setBotState}
+            botData={botData}
+            setBotData={setBotData}
+            setMessages={setMessages}
           />
         ) : (
           <ConversationList
@@ -1635,6 +1932,11 @@ const ChatPage = () => {
           setIsBlurred={setIsBlurred}
           isPreviewViewOnce={isPreviewViewOnce}
           setIsPreviewViewOnce={setIsPreviewViewOnce}
+          botState={botState}
+          setBotState={setBotState}
+          botData={botData}
+          setBotData={setBotData}
+          setMessages={setMessages}
         />
       </div>
     </div>

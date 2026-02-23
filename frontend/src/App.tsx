@@ -17,6 +17,7 @@ import WalletPage from "./pages/WalletPage";
 import AdminDashboard from "./pages/AdminDashboard";
 import AdminChatView from "./pages/AdminChatView";
 import SettingsPage from "./pages/SettingsPage";
+import BlockedUsersPage from "./pages/BlockedUsersPage";
 import ForgotPassword from "./pages/ForgotPassword";
 import NotFound from "./pages/NotFound";
 import CookieConsent from "./components/CookieConsent";
@@ -66,6 +67,7 @@ const MainContent = () => {
         <Route path="/escrow" element={<ProtectedRoute><EscrowPage /></ProtectedRoute>} />
         <Route path="/wallet" element={<ProtectedRoute><WalletPage /></ProtectedRoute>} />
         <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
+        <Route path="/blocked-users" element={<ProtectedRoute><BlockedUsersPage /></ProtectedRoute>} />
         <Route path="/admin" element={<AdminRoute><AdminDashboard /></AdminRoute>} />
         <Route path="/admin/chats/:chatId" element={<AdminRoute><AdminChatView /></AdminRoute>} />
         <Route path="*" element={<NotFound />} />

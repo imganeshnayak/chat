@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { cn } from "@/lib/utils";
 import { Link, useNavigate } from "react-router-dom";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -42,6 +43,7 @@ import {
   getNotifications,
   getSystemSettings,
   updateSystemSettings,
+  getUserTransactions,
   Notification,
   VerificationRequest,
   AdminStats,
@@ -77,6 +79,9 @@ const AdminDashboard = () => {
   const [sentNotifications, setSentNotifications] = useState<Notification[]>([]);
   const [systemSettings, setSystemSettings] = useState<Record<string, string>>({ verification_fee: "" });
   const [isSavingSettings, setIsSavingSettings] = useState(false);
+  const [expandedUsers, setExpandedUsers] = useState<Record<number, boolean>>({});
+  const [userTransactions, setUserTransactions] = useState<Record<number, any>>({});
+  const [isLoadingTransactions, setIsLoadingTransactions] = useState<Record<number, boolean>>({});
 
   useEffect(() => {
     if (!user && !authLoading) {
@@ -237,6 +242,27 @@ const AdminDashboard = () => {
         description: err instanceof Error ? err.message : "Failed to reject verification",
         variant: "destructive"
       });
+    }
+  };
+
+  const toggleUserExpansion = async (userId: number) => {
+    const isExpanded = !!expandedUsers[userId];
+    setExpandedUsers(prev => ({ ...prev, [userId]: !isExpanded }));
+
+    if (!isExpanded && !userTransactions[userId]) {
+      setIsLoadingTransactions(prev => ({ ...prev, [userId]: true }));
+      try {
+        const transactions = await getUserTransactions(userId);
+        setUserTransactions(prev => ({ ...prev, [userId]: transactions }));
+      } catch (err) {
+        toast({
+          title: "Error",
+          description: "Failed to load user transactions",
+          variant: "destructive"
+        });
+      } finally {
+        setIsLoadingTransactions(prev => ({ ...prev, [userId]: false }));
+      }
     }
   };
 
@@ -561,7 +587,6 @@ const AdminDashboard = () => {
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="client">Client</SelectItem>
-                            <SelectItem value="vendor">Vendor</SelectItem>
                             <SelectItem value="admin">Admin</SelectItem>
                           </SelectContent>
                         </Select>
@@ -583,12 +608,138 @@ const AdminDashboard = () => {
                         <Button
                           variant="ghost"
                           size="icon"
+                          onClick={() => toggleUserExpansion(user.id)}
+                          className={expandedUsers[user.id] ? "bg-secondary" : ""}
+                        >
+                          <ChevronRight className={cn("h-4 w-4 transition-transform", expandedUsers[user.id] && "rotate-90")} />
+                        </Button>
+
+                        <Button
+                          variant="ghost"
+                          size="icon"
                           onClick={() => handleDeleteUser(user.id)}
                         >
                           <Trash2 className="h-4 w-4 text-destructive" />
                         </Button>
                       </div>
                     </CardContent>
+                    {expandedUsers[user.id] && (
+                      <CardContent className="pt-0 pb-4 px-6 border-t border-border/50">
+                        <div className="mt-4 space-y-6 animate-in fade-in slide-in-from-top-2 duration-300">
+                          {isLoadingTransactions[user.id] ? (
+                            <div className="flex items-center justify-center py-8">
+                              <Loader2 className="h-6 w-6 text-primary animate-spin" />
+                            </div>
+                          ) : (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                              {/* Escrow Deals */}
+                              <div className="space-y-3">
+                                <h4 className="text-[10px] font-black uppercase tracking-widest text-muted-foreground flex items-center gap-2">
+                                  <Shield className="h-3 w-3" />
+                                  Escrow History
+                                </h4>
+                                {userTransactions[user.id]?.escrowDeals?.length === 0 ? (
+                                  <p className="text-xs text-muted-foreground italic pl-5">No deals found</p>
+                                ) : (
+                                  <div className="space-y-2">
+                                    {userTransactions[user.id]?.escrowDeals?.map((deal: any) => (
+                                      <div key={deal.id} className="bg-secondary/30 rounded-lg p-2.5 border border-border/50 flex items-center justify-between">
+                                        <div className="min-w-0 flex-1">
+                                          <p className="text-xs font-bold truncate">{deal.title}</p>
+                                          <p className="text-[10px] text-muted-foreground">
+                                            {deal.clientId === user.id ? `Client → ${deal.vendor.displayName}` : `${deal.client.displayName} → Vendor`}
+                                          </p>
+                                        </div>
+                                        <div className="text-right ml-4">
+                                          <p className="text-xs font-black text-primary">₹{deal.totalAmount.toLocaleString('en-IN')}</p>
+                                          <Badge className="text-[8px] h-3.5 px-1 bg-primary/20 text-primary border-none">
+                                            {deal.status}
+                                          </Badge>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Payouts and Transactions */}
+                              <div className="space-y-3">
+                                <h4 className="text-[10px] font-black uppercase tracking-widest text-muted-foreground flex items-center gap-2">
+                                  <Wallet className="h-3 w-3" />
+                                  Payouts & Wallet
+                                </h4>
+                                {userTransactions[user.id]?.payoutRequests?.length === 0 && userTransactions[user.id]?.walletTransactions?.length === 0 ? (
+                                  <p className="text-xs text-muted-foreground italic pl-5">No financial activity</p>
+                                ) : (
+                                  <div className="space-y-2">
+                                    {/* Recent Payouts */}
+                                    {userTransactions[user.id]?.payoutRequests?.slice(0, 3).map((p: any) => (
+                                      <div key={p.id} className="bg-secondary/30 rounded-lg p-2.5 border border-border/50 flex items-center justify-between">
+                                        <div className="min-w-0 flex-1">
+                                          <p className="text-xs font-bold">Payout Request</p>
+                                          <p className="text-[10px] text-muted-foreground">{new Date(p.requestedAt).toLocaleDateString()}</p>
+                                        </div>
+                                        <div className="text-right ml-4">
+                                          <p className="text-xs font-black text-amber-500">₹{p.amount.toLocaleString('en-IN')}</p>
+                                          <Badge className={`text-[8px] h-3.5 px-1 border-none ${p.status === 'completed' ? 'bg-green-500/20 text-green-500' : 'bg-amber-500/20 text-amber-500'}`}>
+                                            {p.status}
+                                          </Badge>
+                                        </div>
+                                      </div>
+                                    ))}
+                                    {/* Recent wallet txs if no payouts or more details needed */}
+                                    {userTransactions[user.id]?.walletTransactions?.slice(0, 3).map((t: any) => (
+                                      <div key={t.id} className="bg-secondary/30 rounded-lg p-2.5 border border-border/50 flex items-center justify-between">
+                                        <div className="min-w-0 flex-1">
+                                          <p className="text-xs font-bold truncate">{t.description}</p>
+                                          <p className="text-[10px] text-muted-foreground">{new Date(t.createdAt).toLocaleDateString()}</p>
+                                        </div>
+                                        <div className="text-right ml-4">
+                                          <p className={`text-xs font-black ${t.amount >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                                            {t.amount >= 0 ? '+' : ''}₹{Math.abs(t.amount).toLocaleString('en-IN')}
+                                          </p>
+                                          <p className="text-[8px] text-muted-foreground font-mono">Balance: ₹{t.balance.toLocaleString('en-IN')}</p>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Reviews & Feedback */}
+                          {!isLoadingTransactions[user.id] && (
+                            <div className="pt-4 border-t border-border/50">
+                              <h4 className="text-[10px] font-black uppercase tracking-widest text-muted-foreground flex items-center gap-2 mb-3">
+                                <MessageSquare className="h-3 w-3" />
+                                Reviews & Feedback
+                              </h4>
+                              {userTransactions[user.id]?.ratingsReceived?.length === 0 ? (
+                                <p className="text-xs text-muted-foreground italic pl-5">No reviews received yet</p>
+                              ) : (
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                  {userTransactions[user.id]?.ratingsReceived?.map((r: any) => (
+                                    <div key={r.id} className="bg-secondary/20 rounded-lg p-3 border border-border/30">
+                                      <div className="flex justify-between items-start mb-1">
+                                        <p className="text-[10px] font-bold">from {r.reviewer.displayName}</p>
+                                        <div className="flex gap-0.5">
+                                          {[...Array(5)].map((_, i) => (
+                                            <span key={i} className={`h-2 w-2 rounded-full ${i < r.rating ? 'bg-amber-400' : 'bg-muted'}`} />
+                                          ))}
+                                        </div>
+                                      </div>
+                                      <p className="text-xs text-card-foreground italic">"{r.comment}"</p>
+                                      <p className="text-[8px] text-muted-foreground mt-2">{new Date(r.createdAt).toLocaleDateString()}</p>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </CardContent>
+                    )}
                   </Card>
                 ))}
               </div>

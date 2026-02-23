@@ -63,6 +63,8 @@ const ProfilePage = () => {
     displayName: "",
     bio: "",
     email: "",
+    city: "",
+    pincode: "",
     socialLinks: [] as { platform: string; url: string }[]
   });
   const [isRatingDialogOpen, setIsRatingDialogOpen] = useState(false);
@@ -101,6 +103,8 @@ const ProfilePage = () => {
           displayName: userData.displayName || "",
           bio: userData.bio || "",
           email: userData.email || "",
+          city: userData.city || "",
+          pincode: userData.pincode || "",
           socialLinks: userData.socialLinks || []
         });
         setCanRateUser(false);
@@ -140,7 +144,7 @@ const ProfilePage = () => {
   useEffect(() => {
     if (user) {
       document.title = `${user.displayName || user.username} | Vesper`;
-      
+
       // Update OG tags for social sharing
       const updateMetaTag = (property: string, content: string) => {
         let tag = document.querySelector(`meta[property="${property}"]`);
@@ -156,7 +160,7 @@ const ProfilePage = () => {
       updateMetaTag('og:description', user.bio || `Connect with ${user.displayName || user.username} on Vesper`);
       updateMetaTag('og:image', user.coverPhotoUrl || user.avatarUrl || '/verified-badge.png');
       updateMetaTag('og:url', `${window.location.origin}/profile/${user.username}`);
-      
+
       // Twitter tags
       const updateTwitterTag = (name: string, content: string) => {
         let tag = document.querySelector(`meta[name="${name}"]`);
@@ -306,7 +310,7 @@ const ProfilePage = () => {
   const openViewAllRatings = async () => {
     if (!user) return;
     setIsViewAllRatingsOpen(true);
-    
+
     try {
       const response = await fetch(`/api/users/${user.id}/ratings`);
       if (response.ok) {
@@ -397,6 +401,28 @@ const ProfilePage = () => {
                       placeholder="Tell us about yourself..."
                     />
                   </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="city">City</Label>
+                      <Input
+                        id="city"
+                        value={editForm.city}
+                        onChange={(e) => setEditForm({ ...editForm, city: e.target.value })}
+                        className="bg-secondary border-border"
+                        placeholder="Mumbai"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="pincode">Pincode</Label>
+                      <Input
+                        id="pincode"
+                        value={editForm.pincode}
+                        onChange={(e) => setEditForm({ ...editForm, pincode: e.target.value })}
+                        className="bg-secondary border-border"
+                        placeholder="400001"
+                      />
+                    </div>
+                  </div>
 
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
@@ -454,6 +480,11 @@ const ProfilePage = () => {
                         <img src="/verified-badge.svg" alt="Verified" className="h-6 w-6" title="Verified Account" />
                       )}
                     </div>
+                    {(user.city || user.pincode) && (
+                      <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-2">
+                        {user.city}{user.city && user.pincode ? ", " : ""}{user.pincode}
+                      </p>
+                    )}
                   </div>
 
                   {/* Stats Section */}
@@ -615,9 +646,8 @@ const ProfilePage = () => {
                       {[...Array(5)].map((_, i) => (
                         <Star
                           key={i}
-                          className={`h-4 w-4 ${
-                            i < rating.rating ? "fill-yellow-400 text-yellow-400" : "text-muted-foreground"
-                          }`}
+                          className={`h-4 w-4 ${i < rating.rating ? "fill-yellow-400 text-yellow-400" : "text-muted-foreground"
+                            }`}
                         />
                       ))}
                     </div>

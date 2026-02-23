@@ -28,15 +28,15 @@ router.get('/chats/list', auth, async (req, res) => {
         const whereClause = req.user.role === 'admin'
             ? {
                 OR: [
-                    { senderId: req.user.id },
-                    { receiverId: req.user.id },
+                    { senderId: req.user.id, deletedBySender: false },
+                    { receiverId: req.user.id, deletedByReceiver: false },
                     { chatId: { startsWith: 'support_' } }
                 ]
             }
             : {
                 OR: [
-                    { senderId: req.user.id },
-                    { receiverId: req.user.id }
+                    { senderId: req.user.id, deletedBySender: false },
+                    { receiverId: req.user.id, deletedByReceiver: false }
                 ]
             };
 
@@ -94,7 +94,7 @@ router.get('/chats/list', auth, async (req, res) => {
                     user_id: admin.id,
                     display_name: "Admin",
                     avatar_url: null, // Use default system avatar, not specific admin's pic
-                    username: "admin", // Generic username
+                    username: admin.username, // use actual admin username for profile links
                     unread_count: 0,
                     verified: true,
                     isOfficial: true // Special flag for frontend
@@ -106,7 +106,7 @@ router.get('/chats/list', auth, async (req, res) => {
             if (supportEntry) {
                 supportEntry.display_name = "Admin";
                 supportEntry.avatar_url = null; // Ensure generic avatar
-                supportEntry.username = "admin";
+                // Keep the existing username (the chat participant) so profile links continue to work
                 supportEntry.isOfficial = true;
             }
         }
@@ -146,8 +146,15 @@ router.get('/support', auth, async (req, res) => {
 // GET /api/messages/:chatId - Get messages for a chat
 router.get('/:chatId', auth, async (req, res) => {
     try {
+        const { chatId } = req.params;
         const messages = await prisma.message.findMany({
-            where: { chatId: req.params.chatId },
+            where: {
+                chatId,
+                OR: [
+                    { senderId: req.user.id, deletedBySender: false },
+                    { receiverId: req.user.id, deletedByReceiver: false }
+                ]
+            },
             orderBy: { createdAt: 'asc' },
             include: {
                 sender: { select: { displayName: true, avatarUrl: true, username: true } },
@@ -343,11 +350,17 @@ router.delete('/chat/:chatId', auth, async (req, res) => {
             return res.status(403).json({ error: "Not authorized to clear this chat." });
         }
 
-        // We could technically soft delete for only one user, but standard "Clear History" 
-        // in many simple apps deletes for all. For now, we'll delete all messages in this chatId.
-        await prisma.message.deleteMany({
-            where: { chatId }
-        });
+        // Per-user clear: only hide for the requester
+        await Promise.all([
+            prisma.message.updateMany({
+                where: { chatId, senderId: req.user.id },
+                data: { deletedBySender: true }
+            }),
+            prisma.message.updateMany({
+                where: { chatId, receiverId: req.user.id },
+                data: { deletedByReceiver: true }
+            })
+        ]);
 
         await prisma.activityLog.create({ data: { userId: req.user.id, action: 'Cleared chat history', details: `Chat ID: ${chatId}` } });
 
@@ -361,56 +374,84 @@ router.delete('/chat/:chatId', auth, async (req, res) => {
 // POST /api/messages/batch-delete - Delete multiple messages
 router.post('/batch-delete', auth, async (req, res) => {
     try {
-        const { ids } = req.body;
+        const { ids, type } = req.body; // type: 'me' or 'everyone'
         if (!Array.isArray(ids) || ids.length === 0) {
             return res.status(400).json({ error: "Invalid message IDs." });
         }
 
-        // Find all messages to ensure they belong to the user
+        const isAdmin = req.user.role === 'admin';
+
+        // Find messages to check permissions
         const messages = await prisma.message.findMany({
-            where: {
-                id: { in: ids },
-                senderId: req.user.id
-            }
+            where: { id: { in: ids } }
         });
 
         if (messages.length === 0) {
-            return res.status(404).json({ error: "No valid messages found to delete." });
+            return res.status(404).json({ error: "No messages found." });
         }
 
-        const validIds = messages.map(m => m.id);
         const chatId = messages[0].chatId;
 
-        // Perform soft delete
-        await prisma.message.updateMany({
-            where: { id: { in: validIds } },
-            data: {
-                isDeleted: true,
-                content: "This message was deleted",
-                attachmentUrl: null,
-                attachmentName: null
+        if (type === 'everyone') {
+            // Check if user is owner of all messages or admin
+            const nonOwned = messages.filter(m => m.senderId !== req.user.id);
+            if (nonOwned.length > 0 && !isAdmin) {
+                return res.status(403).json({ error: "You can only delete your own messages for everyone." });
             }
-        });
 
-        const io = req.app.get('io');
-        if (io) {
-            io.to(chatId).emit('messagesDeleted', {
-                messageIds: validIds,
-                chatId: chatId
+            const validIds = messages.map(m => m.id);
+
+            await prisma.message.updateMany({
+                where: { id: { in: validIds } },
+                data: {
+                    isDeleted: true,
+                    content: "This message was deleted",
+                    attachmentUrl: null,
+                    attachmentName: null
+                }
             });
-        }
 
-        res.json({ success: true, count: validIds.length });
+            const io = req.app.get('io');
+            if (io) {
+                io.to(chatId).emit('messagesDeleted', {
+                    messageIds: validIds,
+                    chatId: chatId
+                });
+            }
+            return res.json({ success: true, count: validIds.length, message: "Deleted for everyone" });
+        } else {
+            // Delete for me
+            // Split into sent and received to update different fields
+            const sentIds = messages.filter(m => m.senderId === req.user.id).map(m => m.id);
+            const receivedIds = messages.filter(m => m.receiverId === req.user.id).map(m => m.id);
+
+            if (sentIds.length > 0) {
+                await prisma.message.updateMany({
+                    where: { id: { in: sentIds } },
+                    data: { deletedBySender: true }
+                });
+            }
+
+            if (receivedIds.length > 0) {
+                await prisma.message.updateMany({
+                    where: { id: { in: receivedIds } },
+                    data: { deletedByReceiver: true }
+                });
+            }
+
+            return res.json({ success: true, count: sentIds.length + receivedIds.length, message: "Deleted for you" });
+        }
     } catch (err) {
         console.error('Batch delete error:', err);
         res.status(500).json({ error: 'Server error.' });
     }
 });
 
-// DELETE /api/messages/:id - Delete (soft delete) an individual message
+// DELETE /api/messages/:id - Delete an individual message
 router.delete('/:id', auth, async (req, res) => {
     try {
         const { id } = req.params;
+        const { type } = req.query; // 'me' or 'everyone'
         const messageId = parseInt(id);
 
         const message = await prisma.message.findUnique({
@@ -421,30 +462,58 @@ router.delete('/:id', auth, async (req, res) => {
             return res.status(404).json({ error: "Message not found." });
         }
 
-        if (message.senderId !== req.user.id) {
-            return res.status(403).json({ error: "You can only delete your own messages." });
-        }
+        const isAdmin = req.user.role === 'admin';
+        const isSender = message.senderId === req.user.id;
+        const isReceiver = message.receiverId === req.user.id;
 
-        // Soft delete: keep the record but mark it as deleted
-        const updatedMessage = await prisma.message.update({
-            where: { id: messageId },
-            data: {
-                isDeleted: true,
-                content: "This message was deleted",
-                attachmentUrl: null,
-                attachmentName: null
+        if (type === 'everyone') {
+            // Delete for everyone (Soft Delete)
+            // Regular users can only delete their own messages for everyone
+            if (!isSender && !isAdmin) {
+                return res.status(403).json({ error: "You can only delete your own messages for everyone." });
             }
-        });
 
-        const io = req.app.get('io');
-        if (io) {
-            io.to(message.chatId).emit('messageDeleted', {
-                messageId: messageId,
-                chatId: message.chatId
+            await prisma.message.update({
+                where: { id: messageId },
+                data: {
+                    isDeleted: true,
+                    content: "This message was deleted",
+                    attachmentUrl: null,
+                    attachmentName: null
+                }
             });
-        }
 
-        res.json({ success: true, message: "Message deleted." });
+            const io = req.app.get('io');
+            if (io) {
+                io.to(message.chatId).emit('messageDeleted', {
+                    messageId: messageId,
+                    chatId: message.chatId
+                });
+            }
+            return res.json({ success: true, message: "Message deleted for everyone." });
+        } else {
+            // Delete for me (Me-only)
+            if (isSender) {
+                await prisma.message.update({
+                    where: { id: messageId },
+                    data: { deletedBySender: true }
+                });
+            } else if (isReceiver) {
+                await prisma.message.update({
+                    where: { id: messageId },
+                    data: { deletedByReceiver: true }
+                });
+            } else if (!isAdmin) {
+                // If not sender or receiver, and not admin, can't delete
+                return res.status(403).json({ error: "Not authorized." });
+            } else {
+                // Admin deleting for "me" doesn't make much sense in global view, 
+                // but we'll treat it as a per-user hide if they are participating.
+                return res.status(400).json({ error: "Invalid operation for admin." });
+            }
+
+            return res.json({ success: true, message: "Message deleted for you." });
+        }
     } catch (err) {
         console.error('Delete message error:', err);
         res.status(500).json({ error: 'Server error.' });

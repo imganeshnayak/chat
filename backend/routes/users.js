@@ -22,7 +22,7 @@ const upload = multer({
 router.get('/', auth, adminOnly, async (req, res) => {
     try {
         const users = await prisma.user.findMany({
-            select: { id: true, username: true, email: true, displayName: true, avatarUrl: true, role: true, status: true, verified: true, createdAt: true },
+            select: { id: true, username: true, email: true, displayName: true, avatarUrl: true, role: true, status: true, verified: true, city: true, pincode: true, createdAt: true },
             orderBy: { createdAt: 'desc' },
         });
         res.json(users);
@@ -82,6 +82,8 @@ router.get('/username/:username', auth, async (req, res) => {
                 role: true,
                 status: true,
                 verified: true,
+                city: true,
+                pincode: true,
                 createdAt: true,
                 ratingsReceived: {
                     select: { rating: true }
@@ -157,9 +159,9 @@ router.get('/:id/rating-eligibility', auth, async (req, res) => {
 router.get('/:id/ratings', async (req, res) => {
     try {
         const userId = parseInt(req.params.id);
-        
-        const ratings = await prisma.userRating.findMany({
-            where: { reviewedUserId: userId },
+
+        const ratings = await prisma.rating.findMany({
+            where: { reviewedId: userId },
             select: {
                 id: true,
                 rating: true,
@@ -192,10 +194,50 @@ router.get('/:id/ratings', async (req, res) => {
     }
 });
 
+// GET /api/users/best-profiles - Get verified profiles by location (Moved up to avoid conflict with /:id)
+router.get('/best-profiles', auth, async (req, res) => {
+    try {
+        const { city, pincode } = req.query;
+
+        if (!city && !pincode) {
+            return res.status(400).json({ error: "City or Pincode is required." });
+        }
+
+        const users = await prisma.user.findMany({
+            where: {
+                verified: true,
+                status: 'active',
+                AND: [
+                    city ? { city: { contains: city, mode: 'insensitive' } } : {},
+                    pincode ? { pincode: pincode } : {}
+                ]
+            },
+            select: {
+                id: true,
+                username: true,
+                displayName: true,
+                avatarUrl: true,
+                city: true,
+                pincode: true,
+                verified: true
+            },
+            take: 5
+        });
+
+        res.json(users);
+    } catch (err) {
+        console.error('Best profiles search error:', err);
+        res.status(500).json({ error: 'Server error.' });
+    }
+});
+
 // GET /api/users/:id - Get user profile with rating
 router.get('/:id', auth, async (req, res) => {
     try {
         const userId = parseInt(req.params.id);
+        if (isNaN(userId)) {
+            return res.status(400).json({ error: 'Invalid user ID.' });
+        }
         const user = await prisma.user.findUnique({
             where: { id: userId },
             select: {
@@ -210,6 +252,8 @@ router.get('/:id', auth, async (req, res) => {
                 role: true,
                 status: true,
                 verified: true,
+                city: true,
+                pincode: true,
                 createdAt: true,
                 ratingsReceived: {
                     select: { rating: true }
@@ -260,6 +304,8 @@ router.get('/profile/:id', auth, async (req, res) => {
                 telegramId: true,
                 socialLinks: true,
                 createdAt: true,
+                city: true,
+                pincode: true,
                 ratingsReceived: {
                     select: { rating: true }
                 }
@@ -292,7 +338,7 @@ router.put('/profile/:id', auth, async (req, res) => {
             return res.status(403).json({ error: 'Not authorized.' });
         }
 
-        const { displayName, bio, email, avatarUrl, role, socialLinks, phoneNumber } = req.body;
+        const { displayName, bio, email, avatarUrl, role, socialLinks, phoneNumber, city, pincode } = req.body;
 
         const updateData = {};
         if (displayName !== undefined) updateData.displayName = displayName;
@@ -301,7 +347,9 @@ router.put('/profile/:id', auth, async (req, res) => {
         if (avatarUrl !== undefined) updateData.avatarUrl = avatarUrl;
         if (socialLinks !== undefined) updateData.socialLinks = socialLinks;
         if (phoneNumber !== undefined) updateData.phoneNumber = phoneNumber;
-        if (role !== undefined && ['client', 'vendor'].includes(role)) updateData.role = role;
+        if (city !== undefined) updateData.city = city;
+        if (pincode !== undefined) updateData.pincode = pincode;
+        if (role !== undefined && ['client', 'admin'].includes(role)) updateData.role = role;
 
         const updatedUser = await prisma.user.update({
             where: { id: parseInt(req.params.id) },
@@ -320,6 +368,8 @@ router.put('/profile/:id', auth, async (req, res) => {
                 telegramId: true,
                 socialLinks: true,
                 phoneNumber: true,
+                city: true,
+                pincode: true,
                 createdAt: true
             }
         });
@@ -514,5 +564,6 @@ router.post('/rate', auth, async (req, res) => {
         res.status(500).json({ error: 'Server error.' });
     }
 });
+
 
 export default router;

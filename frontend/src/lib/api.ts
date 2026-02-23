@@ -56,6 +56,8 @@ export interface AuthUser {
   createdAt: string;
   averageRating?: number;
   ratingCount?: number;
+  city?: string;
+  pincode?: string;
 }
 
 export interface AuthResponse {
@@ -111,6 +113,13 @@ export function searchUsers(query: string): Promise<AuthUser[]> {
   return apiFetch<AuthUser[]>(`/api/users/search?q=${encodeURIComponent(query)}`);
 }
 
+export function getBestProfiles(params: { city?: string; pincode?: string }): Promise<AuthUser[]> {
+  const query = new URLSearchParams();
+  if (params.city) query.append("city", params.city);
+  if (params.pincode) query.append("pincode", params.pincode);
+  return apiFetch<AuthUser[]>(`/api/users/best-profiles?${query.toString()}`);
+}
+
 export function rateUser(data: {
   reviewedId: number;
   rating: number;
@@ -139,6 +148,9 @@ export function updateUserProfile(
     email?: string;
     avatarUrl?: string;
     socialLinks?: { platform: string; url: string }[];
+    city?: string;
+    pincode?: string;
+    phoneNumber?: string;
   }
 ): Promise<AuthUser> {
   return apiFetch<AuthUser>(`/api/users/profile/${userId}`, {
@@ -204,6 +216,8 @@ export interface Message {
   isViewOnce?: boolean;
   isOpened?: boolean;
   color?: string;
+  deletedBySender?: boolean;
+  deletedByReceiver?: boolean;
   createdAt: string;
   attachmentUrl?: string;
   attachmentName?: string;
@@ -278,8 +292,8 @@ export function sendMessage(data: {
   });
 }
 
-export function deleteMessage(messageId: number): Promise<{ success: boolean }> {
-  return apiFetch<{ success: boolean }>(`/api/messages/${messageId}`, {
+export function deleteMessage(messageId: number, type: 'me' | 'everyone' = 'me'): Promise<{ success: boolean }> {
+  return apiFetch<{ success: boolean }>(`/api/messages/${messageId}?type=${type}`, {
     method: "DELETE",
   });
 }
@@ -294,10 +308,10 @@ export function getSupportChat(): Promise<{ admin: AuthUser; chatId: string }> {
   return apiFetch<{ admin: AuthUser; chatId: string }>("/api/messages/support");
 }
 
-export function deleteMessagesBatch(messageIds: number[]): Promise<any> {
+export function deleteMessagesBatch(messageIds: number[], type: 'me' | 'everyone' = 'me'): Promise<any> {
   return apiFetch("/api/messages/batch-delete", {
     method: "POST",
-    body: JSON.stringify({ ids: messageIds }),
+    body: JSON.stringify({ ids: messageIds, type }),
   });
 }
 
@@ -473,6 +487,10 @@ export function getAdminChatMessages(chatId: string): Promise<Message[]> {
   return apiFetch(`/api/admin/chats/${chatId}/messages`);
 }
 
+export function getAdminChatDetails(chatId: string): Promise<{ deals: EscrowDeal[] }> {
+  return apiFetch<{ deals: EscrowDeal[] }>(`/api/admin/chats/${chatId}/details`);
+}
+
 export function getAdminEscrowDeals(params?: {
   page?: number;
   limit?: number;
@@ -531,6 +549,14 @@ export function deleteUser(userId: number): Promise<{ success: boolean }> {
   return apiFetch(`/api/admin/users/${userId}`, {
     method: "DELETE",
   });
+}
+
+export function getUserTransactions(userId: number): Promise<{
+  escrowDeals: EscrowDeal[];
+  payoutRequests: PayoutRequest[];
+  walletTransactions: WalletTransaction[];
+}> {
+  return apiFetch(`/api/admin/users/${userId}/transactions`);
 }
 
 // ============ Escrow API ============

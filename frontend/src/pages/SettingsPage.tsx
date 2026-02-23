@@ -249,13 +249,6 @@ const SettingsPage = () => {
                             <AccordionItem value="privacy">
                                 <AccordionTrigger>Privacy</AccordionTrigger>
                                 <AccordionContent className="space-y-4">
-                                    <div className="flex items-center justify-between">
-                                        <div>
-                                            <Label htmlFor="profile-visibility">Profile Visibility</Label>
-                                            <p className="text-sm text-muted-foreground">Allow others to view your profile</p>
-                                        </div>
-                                        <Switch id="profile-visibility" defaultChecked />
-                                    </div>
                                     <Button variant="outline" className="w-full" onClick={() => navigate('/blocked-users')}>
                                         Manage Blocked Users
                                     </Button>

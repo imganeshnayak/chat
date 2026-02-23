@@ -259,6 +259,28 @@ router.get('/chats/:chatId/messages', auth, adminOnly, async (req, res) => {
     }
 });
 
+// GET /api/admin/chats/:chatId/details - Get escrow deals and transaction details for a chat
+router.get('/chats/:chatId/details', auth, adminOnly, async (req, res) => {
+    try {
+        const { chatId } = req.params;
+
+        const deals = await prisma.escrowDeal.findMany({
+            where: { chatId },
+            include: {
+                client: { select: { id: true, displayName: true, username: true } },
+                vendor: { select: { id: true, displayName: true, username: true } },
+                transactions: { orderBy: { createdAt: 'desc' } }
+            },
+            orderBy: { createdAt: 'desc' }
+        });
+
+        res.json({ deals });
+    } catch (err) {
+        console.error('Get chat details error:', err);
+        res.status(500).json({ error: 'Server error.' });
+    }
+});
+
 // GET /api/admin/escrow - Get all escrow deals
 router.get('/escrow', auth, adminOnly, async (req, res) => {
     try {
@@ -613,6 +635,57 @@ router.delete('/users/:id', auth, adminOnly, async (req, res) => {
         res.json({ success: true });
     } catch (err) {
         console.error('Delete user error:', err);
+        res.status(500).json({ error: 'Server error.' });
+    }
+});
+
+// GET /api/admin/users/:id/transactions - Get transaction history for a specific user
+router.get('/users/:id/transactions', auth, adminOnly, async (req, res) => {
+    try {
+        const userId = parseInt(req.params.id);
+
+        const [escrowDeals, payoutRequests, walletTransactions, ratingsReceived, ratingsGiven] = await Promise.all([
+            prisma.escrowDeal.findMany({
+                where: {
+                    OR: [{ clientId: userId }, { vendorId: userId }]
+                },
+                include: {
+                    client: { select: { displayName: true, username: true } },
+                    vendor: { select: { displayName: true, username: true } },
+                    transactions: { orderBy: { createdAt: 'desc' } }
+                },
+                orderBy: { createdAt: 'desc' }
+            }),
+            prisma.payoutRequest.findMany({
+                where: { userId },
+                orderBy: { requestedAt: 'desc' }
+            }),
+            prisma.walletTransaction.findMany({
+                where: { userId },
+                orderBy: { createdAt: 'desc' },
+                take: 20
+            }),
+            prisma.rating.findMany({
+                where: { reviewedId: userId },
+                include: { reviewer: { select: { displayName: true, username: true } } },
+                orderBy: { createdAt: 'desc' }
+            }),
+            prisma.rating.findMany({
+                where: { reviewerId: userId },
+                include: { reviewed: { select: { displayName: true, username: true } } },
+                orderBy: { createdAt: 'desc' }
+            })
+        ]);
+
+        res.json({
+            escrowDeals,
+            payoutRequests,
+            walletTransactions,
+            ratingsReceived,
+            ratingsGiven
+        });
+    } catch (err) {
+        console.error('Get user transactions error:', err);
         res.status(500).json({ error: 'Server error.' });
     }
 });
