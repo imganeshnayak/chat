@@ -100,6 +100,7 @@ const EmojiPicker = ({ onSelect }: { onSelect: (emoji: string) => void }) => (
 );
 
 // Conversation list component moved outside to prevent remounting on state changes
+// Conversation list component moved outside to prevent remounting on state changes
 const ConversationList = ({
   searchQuery,
   setSearchQuery,
@@ -126,167 +127,202 @@ const ConversationList = ({
   user: AuthUser | null;
   onLogout: () => void;
   onSupport: () => void;
-}) => (
-  <div className="flex flex-col h-full min-h-0 bg-background overflow-hidden">
-    {/* Header */}
-    <div className="p-4 border-b border-border sticky top-0 z-10 bg-background/95 backdrop-blur-md">
-      <div className="flex items-center justify-between mb-3">
-        <h1 className="text-xl font-bold text-foreground">Chats</h1>
-        {user && (
-          <div className="flex items-center gap-1">
-            <NotificationBell />
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="rounded-full h-8 w-8 p-0 overflow-hidden border border-border">
-                  <Avatar className="h-full w-full">
-                    <AvatarImage src={user.avatarUrl} />
-                    <AvatarFallback>{user.displayName[0]}</AvatarFallback>
-                  </Avatar>
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56 bg-card border-border">
-                <div className="flex items-center gap-2 p-2 px-3 border-b border-border mb-1">
-                  <Avatar className="h-8 w-8">
-                    <AvatarImage src={user.avatarUrl} />
-                    <AvatarFallback>{user.displayName[0]}</AvatarFallback>
-                  </Avatar>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">{user.displayName}</p>
-                    <p className="text-xs text-muted-foreground truncate">@{user.username}</p>
-                  </div>
-                </div>
-                <DropdownMenuItem onClick={() => window.location.href = '/profile'}>
-                  <User className="mr-2 h-4 w-4" /> Profile
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => window.location.href = '/wallet'}>
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="mr-2 h-4 w-4">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M21 12a2.25 2.25 0 00-2.25-2.25H15a3 3 0 11-6 0H5.25A2.25 2.25 0 003 12m18 0v6a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 18v-6m18 0V9M3 12V9m18 0a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 9m18 0V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v3" />
-                  </svg>
-                  Wallet
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => window.location.href = '/settings'}>
-                  <Settings className="mr-2 h-4 w-4" /> Settings
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={onLogout} className="text-destructive focus:text-destructive">
-                  <LogOut className="mr-2 h-4 w-4" /> Logout
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-        )}
-      </div>
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input
-          className="pl-9 bg-secondary border-border"
-          placeholder="Search conversations or username..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-        />
-      </div>
-    </div>
+}) => {
+  const [isSearchVisible, setIsSearchVisible] = useState(false);
 
-    {/* Chat list */}
-    <ScrollArea className="flex-1">
-      {/* Show search results if searching for users */}
-      {searchQuery.trim().length > 0 && (
-        <>
-          <div className="p-4 border-b border-border">
-            <p className="text-xs font-semibold text-muted-foreground mb-2">USERS</p>
-            {isSearching ? (
-              <div className="text-center text-muted-foreground py-4">Searching...</div>
-            ) : searchResults.length === 0 ? (
-              <div className="text-sm text-muted-foreground py-4">No users found</div>
-            ) : (
-              searchResults.map((foundUser) => (
+  return (
+    <div className="flex flex-col h-full min-h-0 bg-background overflow-hidden font-inter">
+      {/* Header */}
+      <div className="p-4 border-b border-border sticky top-0 z-10 bg-background/95 backdrop-blur-md">
+        <div className="flex items-center justify-between">
+          {!isSearchVisible ? (
+            <h1 className="text-xl font-bold text-foreground tracking-tight">Chats</h1>
+          ) : (
+            <div className="flex-1 relative mr-2 animate-in fade-in slide-in-from-right-4 duration-200">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                autoFocus
+                className="h-9 pl-9 pr-9 bg-secondary/80 border-none text-sm placeholder:text-muted-foreground/50 w-full rounded-full focus-visible:ring-1 focus-visible:ring-primary/20"
+                placeholder="Search username or chats..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={(e) => e.key === 'Escape' && setIsSearchVisible(false)}
+              />
+              {searchQuery && (
                 <button
-                  key={foundUser.id}
-                  onClick={() => startChat(foundUser)}
-                  className="w-full flex items-center gap-3 p-3 hover:bg-secondary/60 transition-colors rounded-lg mb-2"
+                  onClick={() => setSearchQuery("")}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
                 >
-                  <Avatar className="h-10 w-10">
-                    <AvatarImage src={foundUser.avatarUrl} />
-                    <AvatarFallback>{foundUser.displayName[0]}</AvatarFallback>
-                  </Avatar>
-                  <div className="flex-1 min-w-0 text-left">
-                    <p className="font-medium text-foreground truncate">{foundUser.displayName}</p>
-                    <p className="text-xs text-muted-foreground truncate">@{foundUser.username}</p>
-                  </div>
-                  <Plus className="h-4 w-4 text-muted-foreground" />
+                  <X className="h-4 w-4" />
                 </button>
-              ))
-            )}
-          </div>
-          <div className="p-4 border-b border-border">
-            <p className="text-xs font-semibold text-muted-foreground">CONVERSATIONS</p>
-          </div>
-        </>
-      )}
-
-      {/* Show chats */}
-      {isLoading ? (
-        <div className="text-center text-muted-foreground py-8">Loading chats...</div>
-      ) : filteredChats.length === 0 && searchQuery.trim().length === 0 ? (
-        <div className="text-center text-muted-foreground py-8">
-          <p>No conversations yet</p>
-          <p className="text-xs mt-2">Search for a user to start chatting</p>
-        </div>
-      ) : (
-        filteredChats.map((chat) => (
-          <button
-            key={chat.chat_id}
-            onClick={() => setSelectedChat(chat)}
-            className={`w-full grid grid-cols-[48px_1fr_auto] items-center gap-3 p-4 hover:bg-secondary/60 transition-colors border-b border-border text-left overflow-hidden ${selectedChat?.chat_id === chat.chat_id ? "bg-secondary" : ""
-              }`}
-          >
-            <Avatar className="h-12 w-12 shrink-0">
-              <AvatarImage src={chat.avatar_url} />
-              <AvatarFallback className="bg-muted text-muted-foreground">
-                {chat.display_name[0]}
-              </AvatarFallback>
-            </Avatar>
-
-            <div className="min-w-0 flex flex-col gap-1">
-              <div className="flex items-center gap-1.5 overflow-hidden">
-                <span className="font-semibold text-foreground text-[14px] truncate leading-tight">{chat.display_name}</span>
-                <div className="flex items-center gap-1 shrink-0">
-                  {chat.isOfficial ? (
-                    <Badge variant="secondary" className="bg-primary/10 text-primary text-[9px] h-3.5 px-1 border-none flex items-center gap-0.5">
-                      <ShieldCheck className="h-2.5 w-2.5" />
-                      OFFICIAL
-                    </Badge>
-                  ) : chat.chat_id.startsWith('support_') ? (
-                    <Badge variant="secondary" className="bg-indigo-100/80 text-indigo-700 text-[9px] h-3.5 px-1 border-none flex items-center gap-0.5 dark:bg-indigo-900/30 dark:text-indigo-400">
-                      <HelpCircle className="h-2.5 w-2.5" />
-                      SUPPORT
-                    </Badge>
-                  ) : chat.verified && (
-                    <img src="/verified-badge.svg" alt="Verified" className="h-4 w-4" />
-                  )}
-                </div>
-              </div>
-              <p className="text-[12px] text-muted-foreground truncate leading-tight w-full hover:overflow-visible">
-                {chat.last_message}
-              </p>
-            </div>
-
-            <div className="flex flex-col items-end gap-2 self-start pt-0.5 shrink-0 min-w-[50px]">
-              <span className="text-[10px] text-muted-foreground font-medium whitespace-nowrap opacity-80">
-                {chat.last_message_time ? formatTime(chat.last_message_time) : ""}
-              </span>
-              {chat.unread_count > 0 && (
-                <div className="bg-primary text-primary-foreground h-4 min-w-[16px] px-1 flex items-center justify-center text-[10px] font-bold rounded-full">
-                  {chat.unread_count}
-                </div>
               )}
             </div>
-          </button>
-        ))
-      )}
-    </ScrollArea>
-  </div>
-);
+          )}
+
+          <div className="flex items-center gap-1.5">
+            <Button
+              variant="ghost"
+              size="icon"
+              className={`h-9 w-9 rounded-full transition-all duration-200 ${isSearchVisible ? 'bg-secondary text-primary' : 'hover:bg-secondary text-muted-foreground hover:text-foreground'}`}
+              onClick={() => {
+                setIsSearchVisible(!isSearchVisible);
+                if (isSearchVisible) setSearchQuery("");
+              }}
+              title={isSearchVisible ? "Close search" : "Search"}
+            >
+              {isSearchVisible ? <X className="h-5 w-5" /> : <Search className="h-5 w-5" />}
+            </Button>
+
+            {!isSearchVisible && (
+              <>
+                <NotificationBell />
+                {user && (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="icon" className="rounded-full h-9 w-9 p-0 overflow-hidden border border-border/50 hover:border-primary/30 transition-all">
+                        <Avatar className="h-full w-full">
+                          <AvatarImage src={user.avatarUrl} />
+                          <AvatarFallback className="bg-primary/5 text-primary text-xs font-bold">{user.displayName[0]}</AvatarFallback>
+                        </Avatar>
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-56 bg-card border-border shadow-xl rounded-xl p-1.5">
+                      <div className="flex items-center gap-3 p-3 border-b border-border/50 mb-1.5 bg-secondary/30 rounded-lg">
+                        <Avatar className="h-10 w-10 border border-primary/10 shadow-sm">
+                          <AvatarImage src={user.avatarUrl} />
+                          <AvatarFallback className="bg-primary/5 text-primary font-bold">{user.displayName[0]}</AvatarFallback>
+                        </Avatar>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-bold text-foreground truncate leading-none mb-1">{user.displayName}</p>
+                          <p className="text-[11px] text-muted-foreground truncate leading-none">@{user.username}</p>
+                        </div>
+                      </div>
+                      <DropdownMenuItem onClick={() => window.location.href = '/profile'} className="rounded-md cursor-pointer">
+                        <User className="mr-2 h-4 w-4 opacity-70" /> Profile
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => window.location.href = '/wallet'} className="rounded-md cursor-pointer">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="mr-2 h-4 w-4 opacity-70">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M21 12a2.25 2.25 0 00-2.25-2.25H15a3 3 0 11-6 0H5.25A2.25 2.25 0 003 12m18 0v6a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 18v-6m18 0V9M3 12V9m18 0a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 9m18 0V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v3" />
+                        </svg>
+                        Wallet
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => window.location.href = '/settings'} className="rounded-md cursor-pointer">
+                        <Settings className="mr-2 h-4 w-4 opacity-70" /> Settings
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator className="bg-border/50" />
+                      <DropdownMenuItem onClick={onLogout} className="text-destructive focus:text-destructive focus:bg-destructive/10 rounded-md cursor-pointer">
+                        <LogOut className="mr-2 h-4 w-4" /> Logout
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Chat list */}
+      <ScrollArea className="flex-1">
+        {/* Show search results if searching for users */}
+        {searchQuery.trim().length > 0 && (
+          <>
+            <div className="p-4 border-b border-border">
+              <p className="text-xs font-semibold text-muted-foreground mb-2">USERS</p>
+              {isSearching ? (
+                <div className="text-center text-muted-foreground py-4">Searching...</div>
+              ) : searchResults.length === 0 ? (
+                <div className="text-sm text-muted-foreground py-4">No users found</div>
+              ) : (
+                searchResults.map((foundUser) => (
+                  <button
+                    key={foundUser.id}
+                    onClick={() => startChat(foundUser)}
+                    className="w-full flex items-center gap-3 p-3 hover:bg-secondary/60 transition-colors rounded-lg mb-2"
+                  >
+                    <Avatar className="h-10 w-10">
+                      <AvatarImage src={foundUser.avatarUrl} />
+                      <AvatarFallback>{foundUser.displayName[0]}</AvatarFallback>
+                    </Avatar>
+                    <div className="flex-1 min-w-0 text-left">
+                      <p className="font-medium text-foreground truncate">{foundUser.displayName}</p>
+                      <p className="text-xs text-muted-foreground truncate">@{foundUser.username}</p>
+                    </div>
+                    <Plus className="h-4 w-4 text-muted-foreground" />
+                  </button>
+                ))
+              )}
+            </div>
+            <div className="p-4 border-b border-border">
+              <p className="text-xs font-semibold text-muted-foreground">CONVERSATIONS</p>
+            </div>
+          </>
+        )}
+
+        {/* Show chats */}
+        {isLoading ? (
+          <div className="text-center text-muted-foreground py-8">Loading chats...</div>
+        ) : filteredChats.length === 0 && searchQuery.trim().length === 0 ? (
+          <div className="text-center text-muted-foreground py-8">
+            <p>No conversations yet</p>
+            <p className="text-xs mt-2">Search for a user to start chatting</p>
+          </div>
+        ) : (
+          filteredChats.map((chat) => (
+            <button
+              key={chat.chat_id}
+              onClick={() => setSelectedChat(chat)}
+              className={`w-full grid grid-cols-[48px_1fr_auto] items-center gap-3 p-4 hover:bg-secondary/60 transition-colors border-b border-border text-left overflow-hidden ${selectedChat?.chat_id === chat.chat_id ? "bg-secondary" : ""
+                }`}
+            >
+              <Avatar className="h-12 w-12 shrink-0">
+                <AvatarImage src={chat.avatar_url} />
+                <AvatarFallback className="bg-muted text-muted-foreground">
+                  {chat.display_name[0]}
+                </AvatarFallback>
+              </Avatar>
+
+              <div className="min-w-0 flex flex-col gap-1">
+                <div className="flex items-center gap-1.5 overflow-hidden">
+                  <span className="font-semibold text-foreground text-[14px] truncate leading-tight">{chat.display_name}</span>
+                  <div className="flex items-center gap-1 shrink-0">
+                    {chat.isOfficial ? (
+                      <Badge variant="secondary" className="bg-primary/10 text-primary text-[9px] h-3.5 px-1 border-none flex items-center gap-0.5">
+                        <ShieldCheck className="h-2.5 w-2.5" />
+                        OFFICIAL
+                      </Badge>
+                    ) : chat.chat_id.startsWith('support_') ? (
+                      <Badge variant="secondary" className="bg-indigo-100/80 text-indigo-700 text-[9px] h-3.5 px-1 border-none flex items-center gap-0.5 dark:bg-indigo-900/30 dark:text-indigo-400">
+                        <HelpCircle className="h-2.5 w-2.5" />
+                        SUPPORT
+                      </Badge>
+                    ) : chat.verified && (
+                      <img src="/verified-badge.svg" alt="Verified" className="h-4 w-4" />
+                    )}
+                  </div>
+                </div>
+                <p className="text-[12px] text-muted-foreground truncate leading-tight w-full hover:overflow-visible">
+                  {chat.last_message}
+                </p>
+              </div>
+
+              <div className="flex flex-col items-end gap-2 self-start pt-0.5 shrink-0 min-w-[50px]">
+                <span className="text-[10px] text-muted-foreground font-medium whitespace-nowrap opacity-80">
+                  {chat.last_message_time ? formatTime(chat.last_message_time) : ""}
+                </span>
+                {chat.unread_count > 0 && (
+                  <div className="bg-primary text-primary-foreground h-4 min-w-[16px] px-1 flex items-center justify-center text-[10px] font-bold rounded-full">
+                    {chat.unread_count}
+                  </div>
+                )}
+              </div>
+            </button>
+          ))
+        )}
+      </ScrollArea>
+    </div>
+  );
+};
 
 // Chat view component moved outside to prevent remounting
 const ChatView = ({
