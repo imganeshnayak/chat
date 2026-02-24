@@ -16,8 +16,9 @@ const router = express.Router();
 // ─────────────────────────────────────────────────────────────────
 router.post('/send-otp', async (req, res) => {
     try {
-        const { email } = req.body;
+        let { email } = req.body;
         if (!email) return res.status(400).json({ error: 'Email is required.' });
+        email = email.trim().toLowerCase();
 
         // Check if email already registered
         const existing = await prisma.user.findUnique({ where: { email } });
@@ -57,7 +58,9 @@ router.post('/send-otp', async (req, res) => {
 // ─────────────────────────────────────────────────────────────────
 router.post('/register', async (req, res) => {
     try {
-        const { username, email, password, display_name, otp } = req.body;
+        let { username, email, password, display_name, otp } = req.body;
+        username = username?.trim();
+        email = email?.trim().toLowerCase();
 
         // Security: OTP is now mandatory for registration
         if (!otp) {
@@ -133,7 +136,8 @@ router.post('/register', async (req, res) => {
 // ─────────────────────────────────────────────────────────────────
 router.post('/login', async (req, res) => {
     try {
-        const { email, password } = req.body;
+        let { email, password } = req.body;
+        email = email?.trim().toLowerCase();
 
         const user = await prisma.user.findUnique({ where: { email } });
         if (!user) {

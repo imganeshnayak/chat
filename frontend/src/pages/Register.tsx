@@ -61,7 +61,7 @@ const Register = () => {
     e.preventDefault();
     setError("");
     try {
-      await register(username, email, password, displayName, otp);
+      await register(username.trim(), email.trim().toLowerCase(), password, displayName.trim(), otp);
       navigate("/chat", { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Registration failed");

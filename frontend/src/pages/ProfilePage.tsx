@@ -366,7 +366,7 @@ const ProfilePage = () => {
               <div className="relative -mt-24 mb-4 flex justify-center">
                 <div className="relative">
                   <Avatar className="h-32 w-32 border-4 border-background shadow-lg">
-                    <AvatarImage src={user.avatarUrl} />
+                    <AvatarImage src={user.avatarUrl || undefined} />
                     <AvatarFallback className="text-4xl bg-muted">
                       {user.displayName ? user.displayName[0] : '?'}
                     </AvatarFallback>

@@ -106,7 +106,7 @@ export function getUser(id: number): Promise<AuthUser> {
 }
 
 export function getUserByUsername(username: string): Promise<AuthUser> {
-  return apiFetch<AuthUser>(`/api/users/username/${username}`);
+  return apiFetch<AuthUser>(`/api/users/username/${encodeURIComponent(username)}`);
 }
 
 export function searchUsers(query: string): Promise<AuthUser[]> {

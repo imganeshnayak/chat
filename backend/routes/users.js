@@ -68,7 +68,9 @@ router.get('/search', auth, async (req, res) => {
 router.get('/username/:username', auth, async (req, res) => {
     try {
         const { username } = req.params;
-        const trimmedUsername = username?.trim();
+        const decodedUsername = decodeURIComponent(username);
+        const trimmedUsername = decodedUsername.trim();
+
         const user = await prisma.user.findFirst({
             where: {
                 username: {
