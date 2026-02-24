@@ -34,9 +34,11 @@ router.post('/escrow/initiate', auth, async (req, res) => {
             return res.status(400).json({ error: 'Payment already completed for this deal.' });
         }
 
-        // Create Razorpay order
+        // Create Razorpay order using paidAmount (gross) if available, otherwise totalAmount
+        const paymentAmount = deal.paidAmount > 0 ? deal.paidAmount : deal.totalAmount;
+
         const order = await createOrder(
-            deal.totalAmount,
+            paymentAmount,
             'INR',
             {
                 type: 'escrow',
@@ -58,7 +60,7 @@ router.post('/escrow/initiate', auth, async (req, res) => {
                 type: 'escrow',
                 entityId: deal.id,
                 razorpayOrderId: order.id,
-                amount: deal.totalAmount,
+                amount: paymentAmount,
                 currency: 'INR',
                 status: 'created',
                 metadata: { orderId: order.id }
@@ -232,24 +234,27 @@ router.post('/verify', auth, async (req, res) => {
         }
 
         // Check if this payment has already been processed (prevent duplicates)
+        let amount = 0;
         try {
             await prisma.$transaction(async (tx) => {
                 const numericEntityId = parseInt(entityId);
 
                 // 1. Fetch the relevant entity to get the amount
-                let amount = 0;
                 if (type === 'escrow') {
                     const deal = await tx.escrowDeal.findUnique({ where: { id: numericEntityId } });
                     if (!deal) throw new Error('Escrow deal not found');
                     if (deal.clientId !== req.user.id) throw new Error('Unauthorized');
-                    amount = deal.totalAmount;
+                    amount = deal.paidAmount > 0 ? deal.paidAmount : deal.totalAmount;
                 } else if (type === 'verification') {
                     const verificationRequest = await tx.verificationRequest.findUnique({ where: { id: numericEntityId } });
                     if (!verificationRequest) throw new Error('Verification request not found');
                     if (verificationRequest.userId !== req.user.id) throw new Error('Unauthorized');
                     amount = verificationRequest.paymentAmount;
                 } else if (type === 'wallet') {
-                    amount = parseFloat(payment.amount) / 100; // In INR
+                    const originalAmount = parseFloat(payment.amount) / 100;
+                    const fee = originalAmount * 0.02;
+                    const gst = fee * 0.18;
+                    amount = originalAmount - fee - gst; // Net credit amount
                 } else {
                     throw new Error('Invalid payment type');
                 }
@@ -276,7 +281,7 @@ router.post('/verify', auth, async (req, res) => {
                         data: {
                             razorpayPaymentId: paymentId,
                             paymentStatus: 'paid',
-                            paidAmount: deal.totalAmount,
+                            paidAmount: amount, // Store the gross amount paid
                             status: 'active'
                         }
                     });
@@ -285,13 +290,13 @@ router.post('/verify', auth, async (req, res) => {
                         data: {
                             userId: req.user.id,
                             action: 'Paid for escrow deal',
-                            details: `₹${deal.totalAmount} - ${deal.title}`
+                            details: `₹${amount} - ${deal.title}`
                         }
                     });
 
                     const io = req.app.get('io');
-                    sendUserNotification(io, req.user.id, '✅ Payment Successful', `Your payment of ₹${deal.totalAmount.toLocaleString('en-IN')} for "${deal.title}" was successful.`, 'success', { type: 'escrow', dealId: deal.id, chatId: deal.chatId });
-                    sendUserNotification(io, deal.vendorId, '💰 Payment Received', `A client paid ₹${deal.totalAmount.toLocaleString('en-IN')} for the deal "${deal.title}".`, 'success', { type: 'escrow', dealId: deal.id, chatId: deal.chatId });
+                    sendUserNotification(io, req.user.id, '✅ Payment Successful', `Your payment of ₹${amount.toLocaleString('en-IN')} for "${deal.title}" was successful.`, 'success', { type: 'escrow', dealId: deal.id, chatId: deal.chatId });
+                    sendUserNotification(io, deal.vendorId, '💰 Payment Received', `A client paid ₹${amount.toLocaleString('en-IN')} for the deal "${deal.title}".`, 'success', { type: 'escrow', dealId: deal.id, chatId: deal.chatId });
 
                     const systemMessage = await tx.message.create({
                         data: {
@@ -336,9 +341,13 @@ router.post('/verify', auth, async (req, res) => {
                     const io = req.app.get('io');
                     sendUserNotification(io, req.user.id, '🛡️ Verification Payment Received', `We received your payment for verification. Our team will review your account shortly.`, 'success', { type: 'wallet' });
                 } else if (type === 'wallet') {
-                    const updatedUser = await tx.user.update({
+                    await tx.user.update({
                         where: { id: req.user.id },
                         data: { walletBalance: { increment: amount } }
+                    });
+
+                    const updatedUser = await tx.user.findUnique({
+                        where: { id: req.user.id }
                     });
 
                     await tx.walletTransaction.create({
@@ -348,7 +357,7 @@ router.post('/verify', auth, async (req, res) => {
                             amount: amount,
                             balance: updatedUser.walletBalance,
                             reference: paymentId,
-                            description: 'Wallet Top-up via Razorpay'
+                            description: `Wallet Top-up via Razorpay (Net: ₹${amount.toFixed(2)})`
                         }
                     });
 
@@ -365,7 +374,7 @@ router.post('/verify', auth, async (req, res) => {
                 }
             });
 
-            return res.json({ message: 'Payment verified successfully.' });
+            return res.json({ message: 'Payment verified successfully.', amount: amount });
         } catch (err) {
             if (err.code === 'P2002') return res.json({ message: 'Payment already processed.', status: 'already_processed' });
             throw err;
@@ -393,7 +402,10 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
                     if (!deal && !verificationRequest) {
                         if (paymentEntity.notes && paymentEntity.notes.type === 'wallet') {
                             const userId = parseInt(paymentEntity.notes.userId);
-                            const amount = paymentEntity.amount / 100;
+                            const originalAmount = paymentEntity.amount / 100;
+                            const fee = originalAmount * 0.02;
+                            const gst = fee * 0.18;
+                            const amount = originalAmount - fee - gst;
 
                             await tx.paymentLog.create({
                                 data: {
@@ -409,9 +421,13 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
                                 }
                             });
 
-                            const updatedUser = await tx.user.update({
+                            await tx.user.update({
                                 where: { id: userId },
                                 data: { walletBalance: { increment: amount } }
+                            });
+
+                            const updatedUser = await tx.user.findUnique({
+                                where: { id: userId }
                             });
 
                             await tx.walletTransaction.create({
@@ -421,7 +437,7 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
                                     amount: amount,
                                     balance: updatedUser.walletBalance,
                                     reference: paymentId,
-                                    description: 'Wallet Top-up via Razorpay (Webhook)'
+                                    description: `Wallet Top-up via Razorpay (Webhook, Net: ₹${amount.toFixed(2)})`
                                 }
                             });
                             return { type: 'wallet', userId, amount };

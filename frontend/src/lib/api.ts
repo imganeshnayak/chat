@@ -58,6 +58,7 @@ export interface AuthUser {
   ratingCount?: number;
   city?: string;
   pincode?: string;
+  telegramId?: string;
 }
 
 export interface AuthResponse {
@@ -595,6 +596,28 @@ export interface WalletTransaction {
   } | null;
 }
 
+export interface FullUserDetails extends AuthUser {
+  walletBalance: number;
+  razorpayContactId?: string;
+  phoneNumber?: string;
+  activities: ActivityLog[];
+  walletTransactions: WalletTransaction[];
+  clientDeals: (EscrowDeal & { vendor: { id: number; displayName: string; username: string } })[];
+  vendorDeals: (EscrowDeal & { client: { id: number; displayName: string; username: string } })[];
+  payoutRequests: PayoutRequest[];
+  ratingsReceived: (any & { reviewer: { id: number; displayName: string; username: string } })[];
+  ratingsGiven: (any & { reviewed: { id: number; displayName: string; username: string } })[];
+  reportsReceived: (any & { reporter: { id: number; displayName: string; username: string } })[];
+  reportsCreated: (any & { reported: { id: number; displayName: string; username: string } })[];
+  blockedBy: (any & { blocker: { id: number; displayName: string; username: string } })[];
+  blockedUsers: (any & { blocked: { id: number; displayName: string; username: string } })[];
+  verificationRequests: VerificationRequest[];
+}
+
+export function getAdminUserFullDetails(userId: number): Promise<FullUserDetails> {
+  return apiFetch<FullUserDetails>(`/api/admin/users/${userId}/full`);
+}
+
 export interface PayoutRequest {
   id: number;
   userId: number;
@@ -619,6 +642,7 @@ export interface PayoutRequest {
     displayName: string;
     email: string;
     phoneNumber?: string;
+    walletBalance?: number;
   };
 }
 
@@ -732,6 +756,10 @@ export function createEscrowDeal(data: {
   });
 }
 
+export function getPlatformFee(): Promise<{ platform_fee_percent: number }> {
+  return apiFetch<{ platform_fee_percent: number }>("/api/escrow/platform-fee");
+}
+
 export function releaseEscrowPayment(
   dealId: number,
   data: {
@@ -759,9 +787,10 @@ export function updateEscrowDeal(
   });
 }
 
-export function deleteEscrowDeal(dealId: number): Promise<{ success: boolean; message: string }> {
+export function deleteEscrowDeal(dealId: number, reason?: string): Promise<{ success: boolean; message: string }> {
   return apiFetch<{ success: boolean; message: string }>(`/api/escrow/${dealId}`, {
     method: "DELETE",
+    body: reason ? JSON.stringify({ reason }) : undefined,
   });
 }
 
@@ -854,8 +883,8 @@ export function verifyPayment(data: {
   signature: string;
   type: "escrow" | "verification" | "wallet";
   entityId: number;
-}): Promise<{ message: string; status: string }> {
-  return apiFetch<{ message: string; status: string }>("/api/payments/verify", {
+}): Promise<{ message: string; status: string; amount?: number }> {
+  return apiFetch<{ message: string; status: string; amount?: number }>("/api/payments/verify", {
     method: "POST",
     body: JSON.stringify(data),
   });

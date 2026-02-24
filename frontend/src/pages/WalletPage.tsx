@@ -177,6 +177,27 @@ const WalletPage = () => {
                                 </Button>
                             ))}
                         </div>
+
+                        {parseFloat(addAmount) > 0 && (
+                            <div className="bg-secondary/30 rounded-lg p-3 space-y-2 border border-border/50">
+                                <div className="flex justify-between text-xs text-muted-foreground">
+                                    <span>Processing Fee (2%)</span>
+                                    <span>{formatCurrency(parseFloat(addAmount) * 0.02)}</span>
+                                </div>
+                                <div className="flex justify-between text-xs text-muted-foreground">
+                                    <span>GST on Fee (18%)</span>
+                                    <span>{formatCurrency(parseFloat(addAmount) * 0.02 * 0.18)}</span>
+                                </div>
+                                <div className="flex justify-between text-sm font-semibold pt-1 border-t border-border/50">
+                                    <span className="text-foreground">Net Credited to Wallet</span>
+                                    <span className="text-primary">{formatCurrency(parseFloat(addAmount) * (1 - 0.02 * 1.18))}</span>
+                                </div>
+                                <p className="text-[10px] text-muted-foreground italic text-center pt-1">
+                                    * Razorpay transaction charges are deducted from the top-up amount.
+                                </p>
+                            </div>
+                        )}
+
                         <div className="flex items-start gap-2 p-3 bg-secondary/20 rounded-lg">
                             <input
                                 type="checkbox"
@@ -217,14 +238,14 @@ const WalletPage = () => {
                                         order_id: order.orderId,
                                         handler: async function (response: any) {
                                             try {
-                                                await verifyPayment({
+                                                const verification = await verifyPayment({
                                                     orderId: response.razorpay_order_id,
                                                     paymentId: response.razorpay_payment_id,
                                                     signature: response.razorpay_signature,
                                                     type: "wallet",
                                                     entityId: user?.id || 0
                                                 });
-                                                toast.success(`₹${amount} added successfully!`);
+                                                toast.success(`₹${(verification.amount || amount).toFixed(2)} added successfully!`);
                                                 setIsAddMoneyOpen(false);
                                                 setAgreeToWalletTerms(false);
                                                 loadData();
@@ -474,7 +495,7 @@ const WalletPage = () => {
                     <Button onClick={() => setSelectedTx(null)}>Close</Button>
                 </DialogContent>
             </Dialog>
-        </div>
+        </div >
     );
 };
 

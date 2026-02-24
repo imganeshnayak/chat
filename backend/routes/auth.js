@@ -196,8 +196,9 @@ router.get('/me', auth, async (req, res) => {
 // ─────────────────────────────────────────────────────────────────
 router.post('/forgot-password', async (req, res) => {
     try {
-        const { email } = req.body;
+        let { email } = req.body;
         if (!email) return res.status(400).json({ error: 'Email is required.' });
+        email = email.trim().toLowerCase();
 
         const user = await prisma.user.findUnique({ where: { email } });
         // Return 401 if user not found to help user identify wrong email
@@ -237,7 +238,8 @@ router.post('/forgot-password', async (req, res) => {
 // ─────────────────────────────────────────────────────────────────
 router.post('/verify-reset-otp', async (req, res) => {
     try {
-        const { email, otp } = req.body;
+        let { email, otp } = req.body;
+        email = email?.trim()?.toLowerCase();
 
         const otpRecord = await prisma.otpCode.findFirst({
             where: {

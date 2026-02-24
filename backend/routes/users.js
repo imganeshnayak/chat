@@ -349,14 +349,14 @@ router.put('/profile/:id', auth, async (req, res) => {
         const { displayName, bio, email, avatarUrl, role, socialLinks, phoneNumber, city, pincode } = req.body;
 
         const updateData = {};
-        if (displayName !== undefined) updateData.displayName = displayName;
-        if (bio !== undefined) updateData.bio = bio;
-        if (email !== undefined) updateData.email = email;
+        if (displayName !== undefined) updateData.displayName = displayName?.trim();
+        if (bio !== undefined) updateData.bio = bio?.trim();
+        if (email !== undefined) updateData.email = email?.trim()?.toLowerCase();
         if (avatarUrl !== undefined) updateData.avatarUrl = avatarUrl;
         if (socialLinks !== undefined) updateData.socialLinks = socialLinks;
-        if (phoneNumber !== undefined) updateData.phoneNumber = phoneNumber;
-        if (city !== undefined) updateData.city = city;
-        if (pincode !== undefined) updateData.pincode = pincode;
+        if (phoneNumber !== undefined) updateData.phoneNumber = phoneNumber?.trim();
+        if (city !== undefined) updateData.city = city?.trim();
+        if (pincode !== undefined) updateData.pincode = pincode?.trim();
         if (role !== undefined && ['client', 'admin'].includes(role)) updateData.role = role;
 
         const updatedUser = await prisma.user.update({

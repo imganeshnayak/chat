@@ -441,7 +441,7 @@ router.get('/payouts', auth, adminOnly, async (req, res) => {
             prisma.payoutRequest.findMany({
                 where,
                 include: {
-                    user: { select: { id: true, username: true, displayName: true, email: true, phoneNumber: true } }
+                    user: { select: { id: true, username: true, displayName: true, email: true, phoneNumber: true, walletBalance: true } }
                 },
                 orderBy: { requestedAt: 'desc' },
                 skip,
@@ -744,6 +744,72 @@ router.post('/settings', auth, adminOnly, async (req, res) => {
         res.json({ success: true });
     } catch (err) {
         console.error('Update settings error:', err);
+        res.status(500).json({ error: 'Server error.' });
+    }
+});
+
+// GET /api/admin/users/:id/full - Get comprehensive user details
+router.get('/users/:id/full', auth, adminOnly, async (req, res) => {
+    try {
+        const userId = parseInt(req.params.id);
+
+        const user = await prisma.user.findUnique({
+            where: { id: userId },
+            include: {
+                activities: { orderBy: { createdAt: 'desc' }, take: 50 },
+                walletTransactions: { orderBy: { createdAt: 'desc' }, take: 50 },
+                clientDeals: {
+                    include: {
+                        vendor: { select: { id: true, displayName: true, username: true } },
+                        transactions: { orderBy: { createdAt: 'desc' } }
+                    },
+                    orderBy: { createdAt: 'desc' }
+                },
+                vendorDeals: {
+                    include: {
+                        client: { select: { id: true, displayName: true, username: true } },
+                        transactions: { orderBy: { createdAt: 'desc' } }
+                    },
+                    orderBy: { createdAt: 'desc' }
+                },
+                payoutRequests: { orderBy: { requestedAt: 'desc' } },
+                ratingsReceived: {
+                    include: { reviewer: { select: { id: true, displayName: true, username: true } } },
+                    orderBy: { createdAt: 'desc' }
+                },
+                ratingsGiven: {
+                    include: { reviewed: { select: { id: true, displayName: true, username: true } } },
+                    orderBy: { createdAt: 'desc' }
+                },
+                reportsReceived: {
+                    include: { reporter: { select: { id: true, displayName: true, username: true } } },
+                    orderBy: { createdAt: 'desc' }
+                },
+                reportsCreated: {
+                    include: { reported: { select: { id: true, displayName: true, username: true } } },
+                    orderBy: { createdAt: 'desc' }
+                },
+                blockedBy: {
+                    include: { blocker: { select: { id: true, displayName: true, username: true } } },
+                    orderBy: { createdAt: 'desc' }
+                },
+                blockedUsers: {
+                    include: { blocked: { select: { id: true, displayName: true, username: true } } },
+                    orderBy: { createdAt: 'desc' }
+                },
+                verificationRequests: { orderBy: { createdAt: 'desc' } }
+            }
+        });
+
+        if (!user) {
+            return res.status(404).json({ error: 'User not found.' });
+        }
+
+        // Exclude password
+        const { password, ...safeUser } = user;
+        res.json(safeUser);
+    } catch (err) {
+        console.error('Get full user details error:', err);
         res.status(500).json({ error: 'Server error.' });
     }
 });

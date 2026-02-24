@@ -18,11 +18,12 @@ import {
   MessageSquare, Users, DollarSign, Shield, Search,
   Eye, Ban, AlertTriangle, ChevronRight, TrendingUp,
   Activity, UserCheck, Trash2, CheckCircle2, LogOut, Wallet, Bell, Send,
-  IndianRupee, Settings, Loader2
+  IndianRupee, Settings, Loader2, Info, Percent
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
+import AdminUserDetailDialog from "@/components/AdminUserDetailDialog";
 import {
   getAdminStats,
   getAdminUsers,
@@ -77,11 +78,16 @@ const AdminDashboard = () => {
   const [isBroadcasting, setIsBroadcasting] = useState(false);
   const [broadcastColor, setBroadcastColor] = useState("#4f46e5");
   const [sentNotifications, setSentNotifications] = useState<Notification[]>([]);
-  const [systemSettings, setSystemSettings] = useState<Record<string, string>>({ verification_fee: "" });
+  const [systemSettings, setSystemSettings] = useState<Record<string, string>>({
+    verification_fee: "109",
+    platform_fee_percent: "0.10"
+  });
   const [isSavingSettings, setIsSavingSettings] = useState(false);
   const [expandedUsers, setExpandedUsers] = useState<Record<number, boolean>>({});
   const [userTransactions, setUserTransactions] = useState<Record<number, any>>({});
   const [isLoadingTransactions, setIsLoadingTransactions] = useState<Record<number, boolean>>({});
+  const [detailUserId, setDetailUserId] = useState<number | null>(null);
+  const [expandedEscrowDeals, setExpandedEscrowDeals] = useState<Record<number, boolean>>({});
 
   useEffect(() => {
     if (!user && !authLoading) {
@@ -138,7 +144,7 @@ const AdminDashboard = () => {
         setPayouts(payoutsData.payouts);
       } else if (activeTab === "settings") {
         const settingsData = await getSystemSettings();
-        setSystemSettings(settingsData);
+        setSystemSettings(prev => ({ ...prev, ...settingsData }));
       }
     } catch (err) {
       toast({
@@ -606,6 +612,16 @@ const AdminDashboard = () => {
                         </Select>
 
                         <Button
+                          variant="outline"
+                          size="icon"
+                          className="h-9 w-9 text-primary border-primary/20 hover:bg-primary/10"
+                          onClick={() => setDetailUserId(user.id)}
+                          title="View Full Details"
+                        >
+                          <Info className="h-4 w-4" />
+                        </Button>
+
+                        <Button
                           variant="ghost"
                           size="icon"
                           onClick={() => toggleUserExpansion(user.id)}
@@ -801,31 +817,129 @@ const AdminDashboard = () => {
             {activeTab === "escrow" && (
               <div className="space-y-3">
                 {escrowDeals.map((deal) => (
-                  <Card key={deal.id} className="bg-card border-border">
-                    <CardContent className="py-4">
-                      <div className="flex items-start justify-between mb-3">
-                        <div>
-                          <p className="font-medium text-card-foreground">{deal.title}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {deal.client.displayName} → {deal.vendor.displayName}
-                          </p>
+                  <Card key={deal.id} className="bg-card border-border overflow-hidden">
+                    <CardContent className="p-0">
+                      <div
+                        className="p-4 cursor-pointer hover:bg-secondary/20 transition-colors"
+                        onClick={() => setExpandedEscrowDeals(prev => ({ ...prev, [deal.id]: !prev[deal.id] }))}
+                      >
+                        <div className="flex items-start justify-between mb-3">
+                          <div className="flex items-center gap-3">
+                            <div className="p-2 bg-primary/10 rounded-lg">
+                              <Shield className="h-5 w-5 text-primary" />
+                            </div>
+                            <div>
+                              <p className="font-bold text-card-foreground leading-tight">{deal.title}</p>
+                              <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold mt-0.5">
+                                {deal.client.displayName} (@{deal.client.username}) <span className="text-primary mx-1">→</span> {deal.vendor.displayName} (@{deal.vendor.username})
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex flex-col items-end gap-2">
+                            <Badge className={cn(
+                              "text-[10px] px-2 py-0.5 border-none font-bold uppercase tracking-tighter",
+                              deal.status === "active" ? "bg-accent/20 text-accent" :
+                                deal.status === "completed" ? "bg-green-500/20 text-green-500" :
+                                  "bg-muted text-muted-foreground"
+                            )}>
+                              {deal.status}
+                            </Badge>
+                            <ChevronRight className={cn("h-4 w-4 text-muted-foreground transition-transform", expandedEscrowDeals[deal.id] && "rotate-90")} />
+                          </div>
                         </div>
-                        <Badge className={deal.status === "active" ? "bg-accent text-accent-foreground" : deal.status === "completed" ? "bg-green-500 text-white" : "bg-muted text-muted-foreground"}>
-                          {deal.status}
-                        </Badge>
+
+                        <div className="space-y-2">
+                          <div className="flex justify-between text-xs font-bold">
+                            <span className="text-muted-foreground uppercase tracking-widest text-[9px]">Progress</span>
+                            <span className="text-primary">{deal.releasedPercent.toFixed(1)}% Released</span>
+                          </div>
+                          <div className="h-2 bg-secondary rounded-full overflow-hidden border border-border/30">
+                            <div
+                              className="h-full bg-primary rounded-full transition-all shadow-[0_0_10px_rgba(var(--primary),0.3)]"
+                              style={{ width: `${deal.releasedPercent}%` }}
+                            />
+                          </div>
+                          <div className="flex justify-between items-end pt-1">
+                            <div className="flex gap-4">
+                              <div className="flex flex-col">
+                                <span className="text-[9px] text-muted-foreground uppercase tracking-tighter font-black">Escrow Value</span>
+                                <span className="text-sm font-black text-card-foreground">₹{deal.totalAmount.toLocaleString('en-IN')}</span>
+                              </div>
+                              <div className="flex flex-col">
+                                <span className="text-[9px] text-muted-foreground uppercase tracking-tighter font-black">Paid by Client</span>
+                                <span className="text-sm font-black text-muted-foreground opacity-80">₹{deal.paidAmount?.toLocaleString('en-IN') || deal.totalAmount.toLocaleString('en-IN')}</span>
+                              </div>
+                            </div>
+                            <span className="text-[10px] text-muted-foreground opacity-60 font-mono">ID: #{deal.id}</span>
+                          </div>
+                        </div>
                       </div>
-                      <div className="flex justify-between text-sm mb-2">
-                        <span className="text-muted-foreground">
-                          ₹{deal.totalAmount.toLocaleString('en-IN')} total
-                        </span>
-                        <span className="text-primary font-semibold">{deal.releasedPercent.toFixed(1)}% released</span>
-                      </div>
-                      <div className="h-2 bg-secondary rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-primary rounded-full transition-all"
-                          style={{ width: `${deal.releasedPercent}%` }}
-                        />
-                      </div>
+
+                      {expandedEscrowDeals[deal.id] && (
+                        <div className="p-4 bg-secondary/10 border-t border-border/50 animate-in fade-in slide-in-from-top-2 duration-200">
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div className="space-y-4">
+                              <div>
+                                <h4 className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-1.5 flex items-center gap-1.5">
+                                  <Info className="h-3 w-3" /> Description
+                                </h4>
+                                <p className="text-xs text-card-foreground/90 leading-relaxed bg-background/40 p-3 rounded-lg border border-border/30 italic">
+                                  {deal.description || "No description provided"}
+                                </p>
+                              </div>
+                              <div>
+                                <h4 className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-1.5 flex items-center gap-1.5">
+                                  <Shield className="h-3 w-3" /> Terms & Conditions
+                                </h4>
+                                <p className="text-xs text-card-foreground/90 leading-relaxed bg-background/40 p-3 rounded-lg border border-border/30">
+                                  {deal.terms || "No specific terms"}
+                                </p>
+                              </div>
+                            </div>
+
+                            <div className="space-y-4">
+                              <div>
+                                <h4 className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-1.5 flex items-center gap-1.5">
+                                  <TrendingUp className="h-3 w-3" /> Payment History
+                                </h4>
+                                <div className="space-y-2">
+                                  {deal.transactions && deal.transactions.length > 0 ? (
+                                    deal.transactions.map((tx: any) => (
+                                      <div key={tx.id} className="bg-background/40 rounded-lg p-2.5 border border-border/30 flex justify-between items-center group hover:border-primary/30 transition-colors">
+                                        <div>
+                                          <div className="flex items-center gap-2">
+                                            <Badge className="text-[8px] h-3.5 px-1 bg-green-500/10 text-green-500 border-none">{tx.percent}%</Badge>
+                                            <span className="text-[10px] font-black text-card-foreground">₹{tx.amount.toLocaleString('en-IN')}</span>
+                                          </div>
+                                          <p className="text-[9px] text-muted-foreground mt-0.5 truncate max-w-[150px]">{tx.note || "Milestone release"}</p>
+                                        </div>
+                                        <span className="text-[9px] text-muted-foreground opacity-60 font-mono">{new Date(tx.createdAt).toLocaleDateString()}</span>
+                                      </div>
+                                    ))
+                                  ) : (
+                                    <p className="text-[10px] text-muted-foreground italic bg-background/40 p-3 rounded-lg border border-border/30 text-center">No funds released yet</p>
+                                  )}
+                                </div>
+                              </div>
+
+                              <div className="bg-primary/5 rounded-xl p-3 border border-primary/10">
+                                <div className="flex justify-between items-center text-[10px]">
+                                  <span className="text-muted-foreground uppercase font-black tracking-tighter">Creation Date</span>
+                                  <span className="text-card-foreground font-bold">{new Date(deal.createdAt).toLocaleString()}</span>
+                                </div>
+                                <div className="flex justify-between items-center text-[10px] mt-2">
+                                  <span className="text-muted-foreground uppercase font-black tracking-tighter">Razorpay ID</span>
+                                  <span className="text-card-foreground font-mono truncate ml-4 max-w-[120px]">{deal.razorpayPaymentId || "Wallet Payment"}</span>
+                                </div>
+                                <div className="flex justify-between items-center text-[10px] mt-2">
+                                  <span className="text-muted-foreground uppercase font-black tracking-tighter">Payment Status</span>
+                                  <Badge className="text-[8px] h-3.5 px-1 bg-blue-500/10 text-blue-500 border-none uppercase">{deal.paymentStatus || 'processing'}</Badge>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </CardContent>
                   </Card>
                 ))}
@@ -1093,6 +1207,9 @@ const AdminDashboard = () => {
                                   <span className="text-xs text-muted-foreground">@{payout.user?.username}</span>
                                   <span className="text-xs text-muted-foreground">{payout.user?.email}</span>
                                   <span className="text-xs text-primary/80">{payout.user?.phoneNumber || "No registered phone"}</span>
+                                  <span className="text-sm font-bold text-coral mt-1">
+                                    Current Wallet Balance: ₹{(payout.user?.walletBalance || 0).toLocaleString('en-IN')}
+                                  </span>
                                 </div>
 
                                 {payout.adminNote && (
@@ -1325,23 +1442,58 @@ const AdminDashboard = () => {
                       </div>
                     </CardHeader>
                     <CardContent className="p-6 space-y-6">
-                      <div className="space-y-3">
-                        <label className="text-sm font-semibold text-foreground/80 block">Verification Fee (INR)</label>
-                        <div className="relative group">
-                          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                            <IndianRupee className="h-4 w-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="space-y-3">
+                          <label className="text-sm font-semibold text-foreground/80 block uppercase tracking-wider">Verification Fee (INR)</label>
+                          <div className="relative group">
+                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                              <IndianRupee className="h-4 w-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
+                            </div>
+                            <Input
+                              type="number"
+                              className="pl-10 h-12 bg-background/50 border-border/50 focus:border-primary/50 focus:ring-primary/20 rounded-xl transition-all"
+                              value={systemSettings.verification_fee}
+                              onChange={(e) => setSystemSettings(prev => ({ ...prev, verification_fee: e.target.value }))}
+                              placeholder="e.g. 109"
+                            />
                           </div>
-                          <Input
-                            type="number"
-                            className="pl-10 h-12 bg-background/50 border-border/50 focus:border-primary/50 focus:ring-primary/20 rounded-xl transition-all"
-                            value={systemSettings.verification_fee}
-                            onChange={(e) => setSystemSettings(prev => ({ ...prev, verification_fee: e.target.value }))}
-                            placeholder="e.g. 600"
-                          />
+                          <p className="text-[10px] text-muted-foreground italic">One-time fee for blue verification badge.</p>
                         </div>
-                        <div className="bg-primary/5 border border-primary/10 rounded-lg p-3">
+
+                        <div className="space-y-3">
+                          <label className="text-sm font-semibold text-foreground/80 block uppercase tracking-wider">Platform Fee (%)</label>
+                          <div className="relative group">
+                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                              <Percent className="h-4 w-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
+                            </div>
+                            <Input
+                              type="number"
+                              step="0.1"
+                              className="pl-10 h-12 bg-background/50 border-border/50 focus:border-primary/50 focus:ring-primary/20 rounded-xl transition-all"
+                              value={parseFloat(systemSettings.platform_fee_percent || "0") * 100}
+                              onChange={(e) => {
+                                const inputVal = e.target.value;
+                                if (inputVal === "") {
+                                  setSystemSettings(prev => ({ ...prev, platform_fee_percent: "0" }));
+                                  return;
+                                }
+                                const val = parseFloat(inputVal) / 100;
+                                if (!isNaN(val)) {
+                                  setSystemSettings(prev => ({ ...prev, platform_fee_percent: val.toString() }));
+                                }
+                              }}
+                              placeholder="e.g. 10"
+                            />
+                          </div>
+                          <p className="text-[10px] text-muted-foreground italic">Percentage deducted from vendor payouts.</p>
+                        </div>
+                      </div>
+
+                      <div className="bg-primary/5 border border-primary/10 rounded-lg p-3">
+                        <div className="flex gap-2">
+                          <span className="text-primary mt-0.5 font-bold">💡</span>
                           <p className="text-xs text-primary/80 leading-relaxed italic">
-                            💡 This fee is charged one-time when a user applies for a Blue Verification Badge.
+                            These settings control the global economy of the platform. Verification fee is fixed amount, while Platform fee is percentage-based.
                           </p>
                         </div>
                       </div>
@@ -1369,6 +1521,12 @@ const AdminDashboard = () => {
           </ScrollArea>
         </div>
       </div >
+
+      <AdminUserDetailDialog
+        userId={detailUserId}
+        isOpen={!!detailUserId}
+        onClose={() => setDetailUserId(null)}
+      />
     </div >
   );
 };

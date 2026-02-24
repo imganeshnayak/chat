@@ -12,7 +12,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
-import { getEscrowDeals, createEscrowDeal, releaseEscrowPayment, EscrowDeal, initiateEscrowPayment, verifyPayment, deleteEscrowDeal, getWalletBalance } from "@/lib/api";
+import { getEscrowDeals, createEscrowDeal, releaseEscrowPayment, EscrowDeal, initiateEscrowPayment, verifyPayment, deleteEscrowDeal, getWalletBalance, getPlatformFee } from "@/lib/api";
 import { socketService } from "@/lib/socket";
 import LoadingScreen from "@/components/ui/LoadingScreen";
 import { useRazorpay } from "@/hooks/useRazorpay";
@@ -46,6 +46,7 @@ const EscrowPage = () => {
     totalAmount: ""
   });
   const [activeTab, setActiveTab] = useState<"active" | "completed">("active");
+  const [platformFeePercent, setPlatformFeePercent] = useState<number>(0.10); // Default 10%
 
   useEffect(() => {
     if (!user && !authLoading) {
@@ -72,6 +73,21 @@ const EscrowPage = () => {
       }));
     }
   }, [searchParams]);
+
+  // Fetch platform fee settings
+  useEffect(() => {
+    const fetchSettings = async () => {
+      try {
+        const data = await getPlatformFee();
+        if (data.platform_fee_percent) {
+          setPlatformFeePercent(data.platform_fee_percent);
+        }
+      } catch (err) {
+        console.error("Failed to fetch platform fee settings:", err);
+      }
+    };
+    fetchSettings();
+  }, []);
 
   // Listen for real-time escrow updates
   useEffect(() => {
@@ -277,13 +293,21 @@ const EscrowPage = () => {
 
   const handleDeleteDeal = async (dealId: number, isPaid: boolean) => {
     const action = isPaid ? "Cancel & Refund" : "Delete";
-    if (!confirm(`Are you sure you want to ${action.toLowerCase()} this deal?${isPaid ? " Unreleased funds will be returned to your wallet." : ""}`)) {
-      return;
+
+    let reason = "";
+    if (isPaid) {
+      const input = prompt("Please specify the reason for cancellation & refund (optional):");
+      if (input === null) return; // User cancelled prompt
+      reason = input;
+    } else {
+      if (!confirm("Are you sure you want to delete this deal?")) {
+        return;
+      }
     }
 
     setIsCreating(true);
     try {
-      const result = await deleteEscrowDeal(dealId);
+      const result = await deleteEscrowDeal(dealId, reason);
       toast({
         title: "Success",
         description: result.message
@@ -399,7 +423,31 @@ const EscrowPage = () => {
                       onChange={(e) => setNewDeal({ ...newDeal, totalAmount: e.target.value })}
                     />
                   </div>
-                  <Button className="w-full" onClick={handleCreateDeal} disabled={isCreating}>
+
+                  {parseFloat(newDeal.totalAmount) > 0 && (
+                    <div className="bg-secondary/50 rounded-lg p-4 space-y-3 border border-border/50">
+                      <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Escrow Summary</h4>
+                      <div className="space-y-2">
+                        <div className="flex justify-between text-sm">
+                          <span className="text-muted-foreground">Amount to be Deducted</span>
+                          <span className="font-semibold">{formatCurrency(parseFloat(newDeal.totalAmount))}</span>
+                        </div>
+                        <div className="flex justify-between text-xs text-muted-foreground/80">
+                          <span>Platform Fee ({(platformFeePercent * 100).toFixed(1)}%)</span>
+                          <span>- {formatCurrency(parseFloat(newDeal.totalAmount) * platformFeePercent)}</span>
+                        </div>
+                        <div className="flex justify-between text-sm font-bold pt-2 border-t border-border/50">
+                          <span className="text-foreground">Vendor will receive (Net)</span>
+                          <span className="text-primary">{formatCurrency(parseFloat(newDeal.totalAmount) * (1 - platformFeePercent))}</span>
+                        </div>
+                      </div>
+                      <p className="text-[10px] text-muted-foreground text-center italic">
+                        * Platform fees are deducted upfront during deal creation.
+                      </p>
+                    </div>
+                  )}
+
+                  <Button className="w-full mt-2" onClick={handleCreateDeal} disabled={isCreating}>
                     {isCreating ? "Creating..." : "Create Deal"}
                   </Button>
                 </div>

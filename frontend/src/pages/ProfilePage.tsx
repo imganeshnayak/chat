@@ -199,9 +199,16 @@ const ProfilePage = () => {
 
   const handleSave = async () => {
     if (!user) return;
-    setIsSaving(true);
+    const sanitizedForm = {
+      ...editForm,
+      displayName: editForm.displayName?.trim(),
+      bio: editForm.bio?.trim(),
+      email: editForm.email?.trim()?.toLowerCase(),
+      city: editForm.city?.trim(),
+      pincode: editForm.pincode?.trim(),
+    };
     try {
-      const updated = await updateUserProfile(user.id, editForm);
+      const updated = await updateUserProfile(user.id, sanitizedForm);
       setUser(updated);
       setIsEditing(false);
       toast({ title: "Profile updated!", description: "Your changes have been saved." });

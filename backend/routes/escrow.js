@@ -6,6 +6,19 @@ import { sendUserNotification } from './notifications.js';
 const prisma = new PrismaClient();
 const router = express.Router();
 
+// GET /api/escrow/platform-fee - Get current platform fee percentage
+router.get('/platform-fee', auth, async (req, res) => {
+    try {
+        let platformFeePercent = 0.10; // Default
+        const feeSetting = await prisma.systemSetting.findUnique({ where: { key: 'platform_fee_percent' } });
+        if (feeSetting) platformFeePercent = parseFloat(feeSetting.value);
+        res.json({ platform_fee_percent: platformFeePercent });
+    } catch (err) {
+        console.error('Get platform fee error:', err);
+        res.status(500).json({ error: 'Server error.' });
+    }
+});
+
 // GET /api/escrow - Get all escrow deals for current user
 router.get('/', auth, async (req, res) => {
     try {
@@ -153,7 +166,16 @@ router.post('/', auth, async (req, res) => {
             select: { walletBalance: true }
         });
 
-        const amountToDeduct = parseFloat(totalAmount);
+        // Fetch platform fee from settings
+        let platformFeePercent = 0.10; // Default
+        const feeSetting = await prisma.systemSetting.findUnique({ where: { key: 'platform_fee_percent' } });
+        if (feeSetting) platformFeePercent = parseFloat(feeSetting.value);
+
+        const grossAmount = parseFloat(totalAmount);
+        const feeAmount = grossAmount * platformFeePercent;
+        const netAmount = grossAmount - feeAmount;
+
+        const amountToDeduct = grossAmount;
         if (user.walletBalance < amountToDeduct) {
             return res.status(400).json({ error: `Insufficient wallet balance. You need ₹${amountToDeduct.toLocaleString('en-IN')} but only have ₹${user.walletBalance.toLocaleString('en-IN')}. Please add money to your wallet.` });
         }
@@ -193,10 +215,10 @@ router.post('/', auth, async (req, res) => {
                     title,
                     description: description || '',
                     terms: terms || '',
-                    totalAmount: amountToDeduct,
+                    totalAmount: netAmount, // Store Net amount available for release
                     status: 'active',
                     paymentStatus: 'paid',
-                    paidAmount: amountToDeduct
+                    paidAmount: grossAmount // Store Gross amount paid by client
                 },
                 include: {
                     client: {
@@ -224,7 +246,7 @@ router.post('/', auth, async (req, res) => {
                     senderId: currentUserId,
                     receiverId: requestedVendorId,
                     chatId,
-                    content: `📋 New Escrow Deal: "${title}" for ₹${amountToDeduct.toLocaleString('en-IN')}. Funds deducted from client wallet and held in escrow.`,
+                    content: `📋 New Escrow Deal: "${title}" for ₹${grossAmount.toLocaleString('en-IN')}. Funds deducted from client wallet and held in escrow. (Net available for release: ₹${netAmount.toLocaleString('en-IN')} after platform fee)`,
                     messageType: 'escrow_created'
                 },
                 include: {
@@ -297,11 +319,7 @@ router.post('/:id/release', auth, async (req, res) => {
         const io = req.app.get('io');
         let updatedDeal, vendorNet;
 
-        // Fetch platform fee from settings
-        let platformFeePercent = 0.10; // Default
-        const feeSetting = await prisma.systemSetting.findUnique({ where: { key: 'platform_fee_percent' } });
-        if (feeSetting) platformFeePercent = parseFloat(feeSetting.value);
-
+        // Platform fee is now deducted at creation. totalAmount of the deal reflects the NET amount.
         try {
             // Re-think: updateMany doesn't return the updated record.
             // Let's use the transaction with a strictly serializable approach or the check.
@@ -331,13 +349,12 @@ router.post('/:id/release', auth, async (req, res) => {
                     throw new Error('Release failed. Either deal is inactive or amount exceeds 100%.');
                 }
 
-                // Calculate amounts
+                // Calculate amounts using totalAmount (which is Net)
                 // Re-fetch deal inside transaction to ensure we have latest data for calculations
                 const currentDeal = await tx.escrowDeal.findUnique({ where: { id: dealId } });
 
-                const grossAmount = (currentDeal.totalAmount * userPercent) / 100;
-                const feeAmount = grossAmount * platformFeePercent;
-                vendorNet = grossAmount - feeAmount;
+                vendorNet = (currentDeal.totalAmount * userPercent) / 100;
+                const feeAmount = 0; // Already deducted at creation
 
                 // 3. Create escrow transaction record
                 await tx.escrowTransaction.create({
@@ -345,7 +362,7 @@ router.post('/:id/release', auth, async (req, res) => {
                         dealId,
                         percent: userPercent,
                         amount: vendorNet,
-                        note: note || `Payment released (Platform fee: ₹${feeAmount.toLocaleString('en-IN')})`
+                        note: note || `Payment released (Platform fee already deducted at creation)`
                     }
                 });
 
@@ -372,7 +389,7 @@ router.post('/:id/release', auth, async (req, res) => {
                         amount: vendorNet,
                         balance: venUp.walletBalance,
                         reference: `deal_${dealId}`,
-                        description: `Escrow release: ${deal.title} (${userPercent}%). Note: ${(platformFeePercent * 100).toFixed(0)}% fee deducted.`,
+                        description: `Escrow release: ${deal.title} (${userPercent}%).`,
                         metadata: {
                             dealId,
                             dealTitle: deal.title,
@@ -399,7 +416,7 @@ router.post('/:id/release', auth, async (req, res) => {
                         senderId: req.user.id,
                         receiverId: deal.vendorId,
                         chatId: deal.chatId,
-                        content: `💰 Funds Released: Net ₹${vendorNet.toLocaleString('en-IN')} (${userPercent}%) released to vendor for "${deal.title}". (Platform fee: ₹${feeAmount.toLocaleString('en-IN')})`,
+                        content: `💰 Funds Released: ₹${vendorNet.toLocaleString('en-IN')} (${userPercent}%) released to vendor for "${deal.title}".`,
                         messageType: 'escrow_released'
                     },
                     include: {
@@ -442,7 +459,7 @@ router.post('/:id/release', auth, async (req, res) => {
             io,
             deal.vendorId,
             '💰 Payment Released',
-            `You received ₹${vendorNet.toLocaleString('en-IN')} after platform fee from "${deal.title}".`,
+            `You received ₹${vendorNet.toLocaleString('en-IN')} from "${deal.title}".`,
             'success',
             { type: 'wallet', dealId, chatId: deal.chatId }
         );
@@ -526,6 +543,7 @@ router.put('/:id', auth, async (req, res) => {
 router.delete('/:id', auth, async (req, res) => {
     try {
         const dealId = parseInt(req.params.id);
+        const { reason } = req.body;
 
         const deal = await prisma.escrowDeal.findUnique({
             where: { id: dealId }
@@ -571,7 +589,7 @@ router.delete('/:id', auth, async (req, res) => {
                     amount: refundableAmount,
                     balance: updatedClient.walletBalance,
                     reference: `refund_deal_${dealId}`,
-                    description: `Refund for cancelled escrow deal: ${deal.title}`
+                    description: `Refund for cancelled escrow deal: ${deal.title}${reason ? ` (Reason: ${reason})` : ''}`
                 }
             });
 
@@ -586,7 +604,7 @@ router.delete('/:id', auth, async (req, res) => {
                 data: {
                     userId: req.user.id,
                     action: 'Cancelled escrow deal & requested refund',
-                    details: `${deal.title} - Refunded ₹${refundableAmount.toLocaleString('en-IN')}`
+                    details: `${deal.title} - Refunded ₹${refundableAmount.toLocaleString('en-IN')}${reason ? ` | Reason: ${reason}` : ''}`
                 }
             });
 
@@ -596,7 +614,7 @@ router.delete('/:id', auth, async (req, res) => {
                     senderId: req.user.id,
                     receiverId: deal.vendorId,
                     chatId: deal.chatId,
-                    content: `❌ Escrow Cancelled & Refunded: The deal "${deal.title}" was cancelled by the client. ₹${refundableAmount.toLocaleString('en-IN')} has been returned to the client's wallet.`,
+                    content: `❌ Escrow Cancelled & Refunded: The deal "${deal.title}" was cancelled by the client. ₹${refundableAmount.toLocaleString('en-IN')} has been returned to the client's wallet.${reason ? `\n\nReason: ${reason}` : ''}`,
                     messageType: 'escrow_cancelled'
                 },
                 include: {
