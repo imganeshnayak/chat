@@ -68,8 +68,14 @@ router.get('/search', auth, async (req, res) => {
 router.get('/username/:username', auth, async (req, res) => {
     try {
         const { username } = req.params;
-        const user = await prisma.user.findUnique({
-            where: { username: username },
+        const trimmedUsername = username?.trim();
+        const user = await prisma.user.findFirst({
+            where: {
+                username: {
+                    equals: trimmedUsername,
+                    mode: 'insensitive'
+                }
+            },
             select: {
                 id: true,
                 username: true,
