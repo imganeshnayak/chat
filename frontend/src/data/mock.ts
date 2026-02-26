@@ -7,7 +7,7 @@ export const currentUser: User = {
   role: "client",
   bio: "Product designer looking for talented developers",
   phone: "+1 555-0101",
-  email: "alex@chatpay.io",
+  email: "alex@Krovaa.com",
   online: true,
   lastSeen: "now",
 };
@@ -54,7 +54,7 @@ export const users: User[] = [
     role: "admin",
     bio: "Platform administrator",
     phone: "+1 555-0000",
-    email: "admin@chatpay.io",
+    email: "admin@Krovaa.com",
     online: true,
     lastSeen: "now",
   },

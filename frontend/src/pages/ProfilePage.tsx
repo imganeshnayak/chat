@@ -143,7 +143,7 @@ const ProfilePage = () => {
   // Update meta tags for social sharing
   useEffect(() => {
     if (user) {
-      document.title = `${user.displayName || user.username} | Vesper`;
+      document.title = `${user.displayName || user.username} | Krovaa`;
 
       // Update OG tags for social sharing
       const updateMetaTag = (property: string, content: string) => {
@@ -156,8 +156,8 @@ const ProfilePage = () => {
         tag.setAttribute('content', content);
       };
 
-      updateMetaTag('og:title', `${user.displayName || user.username} | Vesper`);
-      updateMetaTag('og:description', user.bio || `Connect with ${user.displayName || user.username} on Vesper`);
+      updateMetaTag('og:title', `${user.displayName || user.username} | Krovaa`);
+      updateMetaTag('og:description', user.bio || `Connect with ${user.displayName || user.username} on Krovaa`);
       updateMetaTag('og:image', user.coverPhotoUrl || user.avatarUrl || '/verified-badge.png');
       updateMetaTag('og:url', `${window.location.origin}/profile/${user.username}`);
 
@@ -172,8 +172,8 @@ const ProfilePage = () => {
         tag.setAttribute('content', content);
       };
 
-      updateTwitterTag('twitter:title', `${user.displayName || user.username} | Vesper`);
-      updateTwitterTag('twitter:description', user.bio || `Connect with ${user.displayName || user.username} on Vesper`);
+      updateTwitterTag('twitter:title', `${user.displayName || user.username} | Krovaa`);
+      updateTwitterTag('twitter:description', user.bio || `Connect with ${user.displayName || user.username} on Krovaa`);
       updateTwitterTag('twitter:image', user.coverPhotoUrl || user.avatarUrl || '/verified-badge.png');
     }
   }, [user]);

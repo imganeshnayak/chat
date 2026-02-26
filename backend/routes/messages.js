@@ -260,7 +260,7 @@ router.post('/upload', auth, upload.single('file'), async (req, res) => {
 
         const uploadResult = await new Promise((resolve, reject) => {
             const stream = cloudinary.uploader.upload_stream(
-                { folder: 'vesper/attachments', resource_type: 'auto', access_mode: 'public' },
+                { folder: 'krovaa/attachments', resource_type: 'auto', access_mode: 'public' },
                 (error, result) => {
                     if (error) reject(error);
                     else resolve(result);

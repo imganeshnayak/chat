@@ -91,7 +91,7 @@ const ForgotPassword = () => {
             <div className="w-full max-w-sm">
                 <div className="flex items-center gap-2 justify-center mb-8">
                     <Send className="h-8 w-8 text-primary" />
-                    <span className="text-2xl font-bold text-foreground">Vesper</span>
+                    <span className="text-2xl font-bold text-foreground">Krovaa</span>
                 </div>
 
                 <div className="bg-card border border-border rounded-xl p-6">

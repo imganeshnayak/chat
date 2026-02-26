@@ -32,7 +32,7 @@ export async function sendRegistrationOtp(email, otp) {
   const html = `
     <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 520px; margin: 0 auto; background: #0f0f0f; border-radius: 16px; overflow: hidden; border: 1px solid #2a2a2a;">
       <div style="background: linear-gradient(135deg, #7c3aed, #4f46e5); padding: 32px; text-align: center;">
-        <h1 style="color: white; margin: 0; font-size: 28px; letter-spacing: -0.5px;">✨ Vesper</h1>
+        <h1 style="color: white; margin: 0; font-size: 28px; letter-spacing: -0.5px;">✨ Krovaa</h1>
         <p style="color: rgba(255,255,255,0.8); margin: 8px 0 0; font-size: 14px;">Secure Messaging Platform</p>
       </div>
       <div style="padding: 32px;">
@@ -49,14 +49,14 @@ export async function sendRegistrationOtp(email, otp) {
         </p>
       </div>
       <div style="background: #0a0a0a; padding: 16px; text-align: center; border-top: 1px solid #1f1f1f;">
-        <p style="color: #4b5563; font-size: 11px; margin: 0;">© 2026 Vesper · ${process.env.EMAIL_USER}</p>
+        <p style="color: #4b5563; font-size: 11px; margin: 0;">© 2026 Krovaa · ${process.env.EMAIL_USER}</p>
       </div>
     </div>`;
 
   await transporter.sendMail({
-    from: `"Vesper" <${process.env.EMAIL_USER}>`,
+    from: `"Krovaa" <${process.env.EMAIL_USER}>`,
     to: email,
-    subject: `${otp} is your Vesper verification code`,
+    subject: `${otp} is your Krovaa verification code`,
     html,
   });
   console.log(`✉️ Registration OTP sent to ${email}`);
@@ -69,7 +69,7 @@ export async function sendPasswordResetOtp(email, otp) {
   const html = `
     <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 520px; margin: 0 auto; background: #0f0f0f; border-radius: 16px; overflow: hidden; border: 1px solid #2a2a2a;">
       <div style="background: linear-gradient(135deg, #dc2626, #7c3aed); padding: 32px; text-align: center;">
-        <h1 style="color: white; margin: 0; font-size: 28px; letter-spacing: -0.5px;">✨ Vesper</h1>
+        <h1 style="color: white; margin: 0; font-size: 28px; letter-spacing: -0.5px;">✨ Krovaa</h1>
         <p style="color: rgba(255,255,255,0.8); margin: 8px 0 0; font-size: 14px;">Password Reset</p>
       </div>
       <div style="padding: 32px;">
@@ -86,14 +86,14 @@ export async function sendPasswordResetOtp(email, otp) {
         </p>
       </div>
       <div style="background: #0a0a0a; padding: 16px; text-align: center; border-top: 1px solid #1f1f1f;">
-        <p style="color: #4b5563; font-size: 11px; margin: 0;">© 2026 Vesper · ${process.env.EMAIL_USER}</p>
+        <p style="color: #4b5563; font-size: 11px; margin: 0;">© 2026 Krovaa · ${process.env.EMAIL_USER}</p>
       </div>
     </div>`;
 
   await transporter.sendMail({
-    from: `"Vesper" <${process.env.EMAIL_USER}>`,
+    from: `"Krovaa" <${process.env.EMAIL_USER}>`,
     to: email,
-    subject: `${otp} is your Vesper password reset code`,
+    subject: `${otp} is your Krovaa password reset code`,
     html,
   });
   console.log(`✉️ Password reset OTP sent to ${email}`);

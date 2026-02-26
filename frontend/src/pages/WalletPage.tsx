@@ -31,7 +31,7 @@ declare global {
 const WalletPage = () => {
     // Set page title
     useEffect(() => {
-        document.title = "Wallet - Vesper";
+        document.title = "Wallet - Krovaa";
     }, []);
     const { user } = useAuth();
     const [balance, setBalance] = useState(0);
@@ -150,7 +150,7 @@ const WalletPage = () => {
                 <DialogContent className="sm:max-w-md">
                     <DialogHeader>
                         <DialogTitle>Add Money to Wallet</DialogTitle>
-                        <CardDescription>Enter the amount you want to add to your Vesper wallet.</CardDescription>
+                        <CardDescription>Enter the amount you want to add to your Krovaa wallet.</CardDescription>
                     </DialogHeader>
                     <div className="space-y-4 py-4">
                         <div className="space-y-2">
@@ -233,7 +233,7 @@ const WalletPage = () => {
                                         key: order.key_id,
                                         amount: order.amount,
                                         currency: order.currency,
-                                        name: "Vesper Wallet",
+                                        name: "Krovaa Wallet",
                                         description: `Top-up ₹${amount}`,
                                         order_id: order.orderId,
                                         handler: async function (response: any) {
@@ -256,7 +256,7 @@ const WalletPage = () => {
                                         },
                                         prefill: {
                                             name: user?.displayName,
-                                            email: user?.username + "@vesper.chat", // Fallback email
+                                            email: user?.username + "@Krovaa.com", // Fallback email
                                         },
                                         theme: { color: "#ec4899" }
                                     };

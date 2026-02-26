@@ -399,7 +399,7 @@ router.post('/avatar', auth, upload.single('avatar'), async (req, res) => {
         const result = await new Promise((resolve, reject) => {
             const stream = cloudinary.uploader.upload_stream(
                 {
-                    folder: 'vesper/avatars',
+                    folder: 'krovaa/avatars',
                     transformation: [{ width: 400, height: 400, crop: 'fill', gravity: 'face' }],
                     access_mode: 'public'
                 },
@@ -434,7 +434,7 @@ router.post('/cover-photo', auth, upload.single('coverPhoto'), async (req, res) 
         const result = await new Promise((resolve, reject) => {
             const stream = cloudinary.uploader.upload_stream(
                 {
-                    folder: 'vesper/covers',
+                    folder: 'krovaa/covers',
                     transformation: [{ width: 1200, height: 300, crop: 'fill', gravity: 'auto' }],
                     access_mode: 'public'
                 },
@@ -472,7 +472,7 @@ router.put('/:id/avatar', auth, upload.single('avatar'), async (req, res) => {
 
         const result = await new Promise((resolve, reject) => {
             const stream = cloudinary.uploader.upload_stream(
-                { folder: 'vesper/avatars', transformation: [{ width: 200, height: 200, crop: 'fill' }] },
+                { folder: 'krovaa/avatars', transformation: [{ width: 200, height: 200, crop: 'fill' }] },
                 (error, result) => {
                     if (error) reject(error);
                     else resolve(result);

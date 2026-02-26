@@ -51,7 +51,7 @@ const CookieConsent = () => {
                     </div>
 
                     <p className="text-sm text-white/70 leading-relaxed">
-                        We use essential cookies to make <span className="text-white font-medium">ChatPay</span> work. With your permission, we'd also like to use optional cookies to improve your experience and analyze site traffic.
+                        We use essential cookies to make <span className="text-white font-medium">Krovaa</span> work. With your permission, we'd also like to use optional cookies to improve your experience and analyze site traffic.
                     </p>
 
                     <div className="flex flex-col sm:flex-row items-center gap-3 pt-2">

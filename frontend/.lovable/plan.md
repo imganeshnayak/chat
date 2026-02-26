@@ -1,4 +1,4 @@
-# ChatPay — Client-Vendor Chat & Escrow Platform (Frontend)
+# Krovaa — Client-Vendor Chat & Escrow Platform (Frontend)
 
 ## Design System
 

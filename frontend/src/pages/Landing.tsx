@@ -47,7 +47,7 @@ const stats = [
 
 const testimonials = [
   {
-    quote: "ChatPay completely changed how I handle client payments. No more chasing invoices.",
+    quote: "Krovaa completely changed how I handle client payments. No more chasing invoices.",
     name: "Sarah K.",
     role: "UI/UX Designer",
     initials: "SK",
@@ -105,7 +105,7 @@ const Landing = () => {
               <Send className="h-4 w-4 text-primary-foreground" />
             </div>
             <span className="text-xl font-bold tracking-tight">
-              Chat<span className="text-primary">Pay</span>
+              Krovaa
             </span>
           </Link>
 
@@ -315,7 +315,7 @@ const Landing = () => {
               Ready to secure your next deal?
             </h2>
             <p className="text-muted-foreground mb-10 text-base max-w-lg mx-auto leading-relaxed">
-              Join thousands of freelancers using ChatPay to get paid faster, work safer, and build lasting client relationships.
+              Join thousands of freelancers using Krovaa to get paid faster, work safer, and build lasting client relationships.
             </p>
 
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
@@ -352,7 +352,7 @@ const Landing = () => {
                 <div className="bg-primary p-1.5 rounded-xl">
                   <Send className="h-4 w-4 text-primary-foreground" />
                 </div>
-                <span className="text-xl font-bold">ChatPay</span>
+                <span className="text-xl font-bold">Krovaa</span>
               </div>
               <p className="text-sm text-muted-foreground leading-relaxed max-w-xs">
                 The world's first chat-first escrow platform — built for the modern gig economy.
@@ -382,7 +382,7 @@ const Landing = () => {
 
           <div className="flex flex-col md:flex-row justify-between items-center gap-4 pt-8 border-t border-border">
             <p className="text-xs text-muted-foreground">
-              © 2026 ChatPay, Inc. Engineered for Security.
+              © 2026 Krovaa, Inc. Engineered for Security.
             </p>
             <div className="flex gap-6 text-xs text-muted-foreground">
               <Link to="/privacy" className="hover:text-foreground transition-colors">Privacy Policy</Link>
