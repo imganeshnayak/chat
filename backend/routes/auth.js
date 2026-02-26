@@ -16,13 +16,19 @@ const router = express.Router();
 // ─────────────────────────────────────────────────────────────────
 router.post('/send-otp', async (req, res) => {
     try {
-        let { email } = req.body;
+        let { email, username } = req.body;
         if (!email) return res.status(400).json({ error: 'Email is required.' });
         email = email.trim().toLowerCase();
 
         // Check if email already registered
-        const existing = await prisma.user.findUnique({ where: { email } });
-        if (existing) return res.status(400).json({ error: 'Email already registered.' });
+        const existingEmail = await prisma.user.findUnique({ where: { email } });
+        if (existingEmail) return res.status(400).json({ error: 'Email already registered. Try logging in.' });
+
+        // If username provided, check if it's taken
+        if (username) {
+            const existingUser = await prisma.user.findUnique({ where: { username: username.trim() } });
+            if (existingUser) return res.status(400).json({ error: 'Username is already taken.' });
+        }
 
         // Invalidate any previous OTPs for this email
         await prisma.otpCode.updateMany({
@@ -91,18 +97,21 @@ router.post('/register', async (req, res) => {
             return res.status(400).json({ error: 'OTP already used or expired.' });
         }
 
-        // Check existing user
-        const existing = await prisma.user.findFirst({
-            where: {
-                OR: [
-                    { email: { equals: email, mode: 'insensitive' } },
-                    { username: { equals: username, mode: 'insensitive' } }
-                ]
-            },
+        // Check existing user - Specific check for email vs username
+        const existingEmail = await prisma.user.findFirst({
+            where: { email: { equals: email, mode: 'insensitive' } }
         });
-        if (existing) {
-            console.log('Registration failed: User already exists', { email, username });
-            return res.status(400).json({ error: 'User already exists.' });
+        if (existingEmail) {
+            console.log('Registration failed: Email already exists', { email });
+            return res.status(400).json({ error: 'This email is already registered. Try logging in instead.' });
+        }
+
+        const existingUsername = await prisma.user.findFirst({
+            where: { username: { equals: username, mode: 'insensitive' } }
+        });
+        if (existingUsername) {
+            console.log('Registration failed: Username taken', { username });
+            return res.status(400).json({ error: 'This username is already taken. Please choose another one.' });
         }
 
         // Validate password strength

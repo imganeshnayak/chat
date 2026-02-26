@@ -45,7 +45,7 @@ const Register = () => {
     try {
       await apiFetch("/api/auth/send-otp", {
         method: "POST",
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email, username }),
       });
       setOtpSent(true);
       setStep("otp");
