@@ -101,12 +101,14 @@ router.post('/register', async (req, res) => {
             },
         });
         if (existing) {
+            console.log('Registration failed: User already exists', { email, username });
             return res.status(400).json({ error: 'User already exists.' });
         }
 
         // Validate password strength
         const passwordValidation = validatePassword(password);
         if (!passwordValidation.isValid) {
+            console.log('Registration failed: Weak password', { error: passwordValidation.message });
             return res.status(400).json({ error: passwordValidation.message });
         }
 
