@@ -48,7 +48,7 @@ services:
     build:
       context: ./frontend
       args:
-        - VITE_API_URL=${VITE_API_URL:-https://srv1267322.hstgr.cloud}
+        - VITE_API_URL=${VITE_API_URL:-https://Krovaa.com}
     container_name: vesper-frontend
     restart: always
     ports:
