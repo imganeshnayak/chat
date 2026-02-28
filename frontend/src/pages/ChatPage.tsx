@@ -131,13 +131,16 @@ const ConversationList = ({
   const [isSearchVisible, setIsSearchVisible] = useState(false);
 
   return (
-    <div className="flex flex-col h-full min-h-0 bg-background overflow-hidden font-inter">
+    <div className="flex flex-col h-full min-h-0 bg-background/50 overflow-hidden font-dm-sans">
+
       {/* Header */}
-      <div className="p-4 border-b border-border sticky top-0 z-10 bg-background/95 backdrop-blur-md">
+      <div className="p-4 border-b border-white/5 sticky top-0 z-10 bg-background/40 backdrop-blur-xl">
+
         <div className="flex items-center justify-between">
           {!isSearchVisible ? (
-            <h1 className="text-xl font-bold text-foreground tracking-tight">Chats</h1>
+            <h1 style={{ fontFamily: "'Syne', sans-serif" }} className="text-xl font-bold text-white tracking-tight">Chats</h1>
           ) : (
+
             <div className="flex-1 relative mr-2 animate-in fade-in slide-in-from-right-4 duration-200">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
@@ -179,7 +182,8 @@ const ConversationList = ({
                 {user && (
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon" className="rounded-full h-9 w-9 p-0 overflow-hidden border border-border/50 hover:border-primary/30 transition-all">
+                      <Button variant="ghost" size="icon" className="rounded-full h-9 w-9 p-0 overflow-hidden border border-white/5 hover:border-blue-500/30 hover:bg-white/5 transition-all">
+
                         <Avatar className="h-full w-full">
                           <AvatarImage src={user.avatarUrl} />
                           <AvatarFallback className="bg-primary/5 text-primary text-xs font-bold">{user.displayName[0]}</AvatarFallback>
@@ -477,16 +481,23 @@ const ChatView = ({
   };
   if (!selectedChat) {
     return (
-      <div className="flex flex-col h-full min-h-0 items-center justify-center bg-background">
-        <div className="text-center text-muted-foreground p-8">
-          <div className="bg-secondary/30 h-24 w-24 rounded-full flex items-center justify-center mx-auto mb-6 shadow-sm">
-            <Send className="h-10 w-10 text-primary opacity-40 -rotate-12" />
+      <div className="flex flex-col h-full min-h-0 items-center justify-center bg-[#050810] relative overflow-hidden">
+        {/* Decorative background for empty state */}
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-blue-600/5 rounded-full blur-[120px] pointer-events-none" />
+
+        <div className="text-center relative z-10 p-8">
+          <div className="bg-blue-600/10 h-24 w-24 rounded-3xl flex items-center justify-center mx-auto mb-8 border border-blue-500/20 shadow-2xl shadow-blue-600/10 -rotate-6 animate-float">
+            <Send className="h-10 w-10 text-blue-500 opacity-80" />
           </div>
-          <h2 className="text-xl font-semibold text-foreground mb-2">Your Messages</h2>
-          <p className="max-w-[240px] mx-auto text-sm">Select a conversation from the list to start chatting with your friends</p>
+          <h2 style={{ fontFamily: "'Syne', sans-serif" }} className="text-3xl font-bold text-white mb-4 tracking-tight">Your Messages</h2>
+          <p className="max-w-[280px] mx-auto text-sm text-white/40 leading-relaxed font-light">
+            Select a conversation from the list to start chatting. <br />
+            Your privacy is our priority.
+          </p>
         </div>
       </div>
     );
+
   }
 
   return (
@@ -506,7 +517,8 @@ const ChatView = ({
       )}
 
       {/* Chat header */}
-      <div className="flex items-center gap-3 p-4 border-b border-border z-20 bg-background/95 backdrop-blur-md min-h-[73px] flex-shrink-0">
+      <div className="flex items-center gap-3 p-4 border-b border-white/5 z-20 bg-background/40 backdrop-blur-xl min-h-[73px] flex-shrink-0">
+
         {isSelectionMode ? (
           <div className="flex items-center justify-between w-full">
             <div className="flex items-center gap-4">
@@ -563,7 +575,8 @@ const ChatView = ({
             </Avatar>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-1.5">
-                <h3 className="font-semibold text-foreground truncate">{selectedChat.display_name}</h3>
+                <h3 style={{ fontFamily: "'Syne', sans-serif" }} className="font-bold text-white tracking-tight truncate">{selectedChat.display_name}</h3>
+
                 {selectedChat.isOfficial ? (
                   <Badge variant="secondary" className="bg-primary/10 text-primary text-[10px] px-1.5 border-none flex items-center gap-0.5">
                     <ShieldCheck className="h-3.5 w-3.5" />
@@ -602,7 +615,8 @@ const ChatView = ({
       </div>
 
       {/* Messages */}
-      <div className="flex-1 relative overflow-hidden min-h-0 bg-background" data-nocontext>
+      <div className="flex-1 relative overflow-hidden min-h-0 bg-[#050810]/30" data-nocontext>
+
 
         <div
           className="h-full overflow-y-auto scrollbar-thin scrollbar-thumb-primary/20 scroll-smooth relative z-10"
@@ -1913,8 +1927,9 @@ const ChatPage = () => {
 
   // Desktop: side-by-side
   return (
-    <div className="flex h-[calc(100vh-64px)] overflow-hidden">
-      <div className="w-80 border-r border-border shrink-0 h-full overflow-hidden">
+    <div className="flex h-[calc(100vh-64px)] overflow-hidden bg-[#050810]">
+      <div className="w-80 border-r border-white/5 shrink-0 h-full overflow-hidden">
+
         <ConversationList
           searchQuery={searchQuery}
           setSearchQuery={setSearchQuery}

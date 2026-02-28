@@ -2,73 +2,91 @@ import { Link, useNavigate } from "react-router-dom";
 import {
   MessageSquare, Shield, Share2, DollarSign,
   ArrowRight, Send, CheckCircle2, Zap,
-  Star, Users, TrendingUp
+  Star, Users, TrendingUp, ChevronLeft, ChevronRight
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
-import { useEffect } from "react";
+import { useEffect, useState, useRef } from "react";
 
-const features = [
+/* ─── Google Font import (Syne + DM Sans) injected once ─── */
+if (typeof document !== "undefined" && !document.getElementById("krovaa-fonts")) {
+  const link = document.createElement("link");
+  link.id = "krovaa-fonts";
+  link.rel = "stylesheet";
+  link.href =
+    "https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap";
+  document.head.appendChild(link);
+}
+
+/* ─── Data ─── */
+const slides = [
   {
+    tag: "Real-Time Chat",
+    headline: "Every deal starts\nwith a conversation.",
+    body: "WhatsApp-style messaging with text, images, documents & voice notes — no email chains, no missed context.",
     icon: MessageSquare,
-    title: "Real-Time Chat",
-    desc: "WhatsApp-style messaging with text, images, documents & voice notes.",
-    color: "text-accent",
-    bg: "bg-accent/10",
+    accent: "#2563EB",
   },
   {
-    icon: Shield,
-    title: "Escrow Payments",
-    desc: "Secure milestone-based payments. Release funds by percentage as work progresses.",
-    color: "text-primary",
-    bg: "bg-primary/10",
-  },
-  {
-    icon: Share2,
-    title: "Profile Sharing",
-    desc: "Share your professional profile via link or QR code to attract more clients.",
-    color: "text-coral",
-    bg: "bg-coral/10",
-  },
-  {
+    tag: "Payment Management",
+    headline: "Get paid on\nyour terms.",
+    body: "Milestone-based payment releases give both sides full control. Transparent records for every transaction.",
     icon: DollarSign,
-    title: "Transparent Deals",
-    desc: "Full transparency with detailed payment records for every transaction.",
-    color: "text-accent",
-    bg: "bg-accent/10",
+    accent: "#1D4ED8",
+  },
+  {
+    tag: "Profile & Sharing",
+    headline: "Your brand,\none link away.",
+    body: "Share your professional profile via link or QR code. Let clients come to you — fully set up in minutes.",
+    icon: Share2,
+    accent: "#3B82F6",
+  },
+  {
+    tag: "Transparent Deals",
+    headline: "Work that speaks\nfor itself.",
+    body: "Full audit trail of messages, deliverables, and payments. Both parties always know where things stand.",
+    icon: Shield,
+    accent: "#60A5FA",
+  },
+  {
+    tag: "Sarah K. · Designer",
+    headline: "Krovaa changed\nhow I work entirely.",
+    body: "No more chasing clients for payments or losing track of project details across a dozen apps.",
+    icon: Star,
+    accent: "#2563EB",
+    isTestimonial: true,
+  },
+  {
+    tag: "Marcus T. · Developer",
+    headline: "Everything lives\nin one place.",
+    body: "Conversation, deliverables, contracts, payments — one link, one thread, one truth.",
+    icon: Star,
+    accent: "#1D4ED8",
+    isTestimonial: true,
+  },
+  {
+    tag: "Priya N. · Strategist",
+    headline: "Clients trust me\nmore because of it.",
+    body: "The transparency Krovaa offers has made closing deals faster and keeping clients longer.",
+    icon: Star,
+    accent: "#3B82F6",
+    isTestimonial: true,
   },
 ];
 
 const stats = [
   { value: "12K+", label: "Freelancers", icon: Users },
-  { value: "$4.2M", label: "Secured via Escrow", icon: TrendingUp },
+  { value: "$4.2M", label: "Transacted", icon: TrendingUp },
   { value: "4.9★", label: "Average Rating", icon: Star },
 ];
 
-const testimonials = [
-  {
-    quote: "Krovaa completely changed how I handle client payments. No more chasing invoices.",
-    name: "Sarah K.",
-    role: "UI/UX Designer",
-    initials: "SK",
-  },
-  {
-    quote: "The escrow system gives both me and my clients peace of mind on every project.",
-    name: "Marcus T.",
-    role: "Full-Stack Developer",
-    initials: "MT",
-  },
-  {
-    quote: "I love how everything — conversation, contracts, payments — lives in one place.",
-    name: "Priya N.",
-    role: "Brand Strategist",
-    initials: "PN",
-  },
-];
-
+/* ─── Component ─── */
 const Landing = () => {
   const { user, isLoading } = useAuth();
   const navigate = useNavigate();
+  const [current, setCurrent] = useState(0);
+  const autoRef = useRef(null);
+
 
   useEffect(() => {
     if (!isLoading && user) {
@@ -76,52 +94,85 @@ const Landing = () => {
     }
   }, [user, isLoading, navigate]);
 
+  /* auto-advance */
+  const startAuto = () => {
+    clearInterval(autoRef.current);
+    autoRef.current = setInterval(() => setCurrent((c) => (c + 1) % slides.length), 5000);
+  };
+  useEffect(() => { startAuto(); return () => clearInterval(autoRef.current); }, []);
+
+  const go = (dir) => {
+    setCurrent((c) => (c + dir + slides.length) % slides.length);
+    startAuto();
+  };
+
+  /* drag / swipe */
+  const onDragStart = (e) => {
+    dragStart.current = e.clientX ?? e.touches?.[0]?.clientX;
+    setDragging(true);
+  };
+  const onDragEnd = (e) => {
+    if (!dragging) return;
+    const end = e.clientX ?? e.changedTouches?.[0]?.clientX;
+    const diff = dragStart.current - end;
+    if (Math.abs(diff) > 50) go(diff > 0 ? 1 : -1);
+    setDragging(false);
+  };
+
+
+
+  const [dragging, setDragging] = useState(false);
+  const dragStart = useRef(0);
+
+
   if (isLoading || user) return null;
 
-  return (
-    <div className="min-h-screen bg-background text-foreground selection:bg-primary selection:text-primary-foreground">
+  const slide = slides[current];
+  const SlideIcon = slide.icon;
 
-      {/* Ambient background */}
-      <div className="fixed inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-[15%] -left-[10%] w-[50%] h-[50%] rounded-full bg-primary/5 blur-[140px]" />
-        <div className="absolute top-[30%] -right-[8%] w-[35%] h-[40%] rounded-full bg-accent/8 blur-[120px]" />
-        <div className="absolute bottom-[10%] left-[20%] w-[30%] h-[30%] rounded-full bg-coral/5 blur-[100px]" />
-        {/* Subtle grid overlay */}
+  return (
+    <div
+      style={{ fontFamily: "'DM Sans', sans-serif" }}
+      className="min-h-screen bg-[#050810] text-white selection:bg-blue-600 selection:text-white overflow-x-hidden"
+    >
+
+      {/* ── Ambient glows ── */}
+      <div className="fixed inset-0 pointer-events-none overflow-hidden">
+        <div className="absolute -top-32 left-1/2 -translate-x-1/2 w-[700px] h-[400px] rounded-full bg-blue-700/10 blur-[130px]" />
+        <div className="absolute top-[60%] -right-32 w-[400px] h-[400px] rounded-full bg-blue-900/15 blur-[120px]" />
+        {/* grid */}
         <div
-          className="absolute inset-0 opacity-[0.025]"
+          className="absolute inset-0 opacity-[0.03]"
           style={{
             backgroundImage:
-              "linear-gradient(to right, currentColor 1px, transparent 1px), linear-gradient(to bottom, currentColor 1px, transparent 1px)",
-            backgroundSize: "64px 64px",
+              "linear-gradient(to right, #3b82f6 1px, transparent 1px), linear-gradient(to bottom, #3b82f6 1px, transparent 1px)",
+            backgroundSize: "72px 72px",
           }}
         />
       </div>
 
-      {/* ── Nav ── */}
-      <nav className="sticky top-0 z-50 backdrop-blur-xl border-b border-border/40 bg-background/75">
+      {/* ── NAV ── */}
+
+      <nav className="sticky top-0 z-50 border-b border-white/5 backdrop-blur-2xl bg-[#050810]/80">
         <div className="flex items-center justify-between px-6 py-4 max-w-7xl mx-auto">
-          <Link to="/" className="flex items-center gap-2.5 group cursor-pointer">
-            <div className="bg-primary p-1.5 rounded-xl transition-all duration-300 group-hover:shadow-lg group-hover:shadow-primary/30 group-hover:scale-105">
-              <Send className="h-4 w-4 text-primary-foreground" />
-            </div>
-            <span className="text-xl font-bold tracking-tight">
+          <Link to="/" className="flex items-center group">
+            <span style={{ fontFamily: "'Syne', sans-serif" }} className="text-2xl font-bold tracking-tight text-white group-hover:text-blue-500 transition-colors">
               Krovaa
             </span>
           </Link>
 
-          <div className="hidden md:flex items-center gap-8 text-sm font-medium text-muted-foreground">
-            <a href="#features" className="hover:text-foreground transition-colors duration-200">Features</a>
-            <a href="#testimonials" className="hover:text-foreground transition-colors duration-200">Testimonials</a>
+
+          <div className="hidden md:flex gap-8 text-sm font-medium text-white/40">
+            <a href="#how" className="hover:text-white transition-colors">How it works</a>
+            <a href="#carousel" className="hover:text-white transition-colors">Features</a>
           </div>
 
           <div className="flex items-center gap-3">
             <Link to="/login" className="hidden sm:block">
-              <Button variant="ghost" className="text-muted-foreground hover:text-foreground transition-colors">
-                Sign In
-              </Button>
+              <Button variant="ghost" className="text-white/50 hover:text-white hover:bg-white/5 text-sm">Sign In</Button>
             </Link>
             <Link to="/register">
-              <Button className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-md shadow-primary/20 transition-all hover:shadow-lg hover:shadow-primary/30 hover:scale-[1.02]">
+              <Button className="bg-blue-600 hover:bg-blue-500 text-white text-sm shadow-lg shadow-blue-900/40 transition-all hover:shadow-blue-600/40 hover:scale-[1.02]">
                 Get Started
               </Button>
             </Link>
@@ -129,35 +180,42 @@ const Landing = () => {
         </div>
       </nav>
 
-      {/* ── Hero ── */}
-      <section className="relative pt-24 pb-20 md:pt-36 md:pb-28 px-6">
+      {/* ── HERO ── */}
+      <section className="relative pt-28 pb-20 md:pt-40 md:pb-28 px-6">
         <div className="max-w-5xl mx-auto text-center">
 
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-secondary border border-border/60 text-xs font-semibold text-accent tracking-wide uppercase mb-10 shadow-sm">
-            <Zap className="h-3.5 w-3.5 fill-current" />
-            The Future of Freelancing
+          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-blue-500/30 bg-blue-500/10 text-xs font-semibold text-blue-400 tracking-widest uppercase mb-10">
+            <Zap className="h-3 w-3 fill-current" />
+            Built for modern freelancers
           </div>
 
-          <h1 className="text-5xl sm:text-6xl md:text-[5.5rem] font-extrabold leading-[1.05] tracking-tight mb-8">
-            Chat. Pay.{" "}
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary via-coral to-accent">
-              Deliver.
+          <h1
+            style={{ fontFamily: "'Syne', sans-serif", lineHeight: 1.02 }}
+            className="text-5xl sm:text-6xl md:text-[6rem] font-extrabold tracking-tight mb-8"
+          >
+            Chat.{" "}
+            <span className="relative inline-block">
+              <span className="relative z-10 text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-blue-300 to-cyan-400">
+                Pay.
+              </span>
+              <span className="absolute bottom-1 left-0 right-0 h-[3px] bg-gradient-to-r from-blue-600 to-cyan-500 rounded-full" />
             </span>
+            {" "}Deliver.
           </h1>
 
-          <p className="text-lg md:text-xl text-muted-foreground mb-12 max-w-2xl mx-auto leading-relaxed">
-            The marketplace where{" "}
-            <span className="text-foreground font-medium">conversations meet contracts</span>.
-            Secure escrow payments and real-time chat — built for modern professionals.
+          <p className="text-lg md:text-xl text-white/40 mb-12 max-w-xl mx-auto leading-relaxed font-light">
+            The platform where{" "}
+            <span className="text-white/80 font-normal">conversations become contracts</span>
+            {" "}— and work actually gets done.
           </p>
 
-          <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-16">
+          <div className="flex flex-col sm:flex-row gap-4 justify-center mb-16">
             <Link to="/register">
               <Button
                 size="lg"
-                className="h-13 px-10 text-base bg-primary text-primary-foreground hover:bg-primary/90 hover:scale-[1.03] active:scale-100 transition-all shadow-xl shadow-primary/25"
+                className="h-12 px-10 bg-blue-600 hover:bg-blue-500 text-white text-base shadow-2xl shadow-blue-900/50 transition-all hover:scale-[1.03] hover:shadow-blue-600/50"
               >
-                Start Free Trial
+                Start for free
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
             </Link>
@@ -165,21 +223,17 @@ const Landing = () => {
               <Button
                 size="lg"
                 variant="ghost"
-                className="h-13 px-8 text-base border border-border hover:border-primary/40 hover:bg-secondary transition-all"
+                className="h-12 px-8 text-base border border-white/10 hover:border-blue-500/40 hover:bg-blue-500/5 text-white/60 hover:text-white transition-all"
               >
                 Sign In
               </Button>
             </Link>
           </div>
 
-          <div className="flex flex-wrap justify-center gap-6 text-sm text-muted-foreground">
-            {[
-              "No credit card required",
-              "Free forever plan",
-              "Cancel anytime",
-            ].map((item) => (
+          <div className="flex flex-wrap justify-center gap-6 text-sm text-white/30">
+            {["No credit card required", "Free forever plan", "Cancel anytime"].map((item) => (
               <div key={item} className="flex items-center gap-2">
-                <CheckCircle2 className="h-4 w-4 text-accent shrink-0" />
+                <CheckCircle2 className="h-4 w-4 text-blue-500 shrink-0" />
                 {item}
               </div>
             ))}
@@ -187,142 +241,203 @@ const Landing = () => {
         </div>
       </section>
 
-      {/* ── Stats Bar ── */}
-      <section className="px-6 pb-20">
-        <div className="max-w-4xl mx-auto">
-          <div className="grid grid-cols-1 sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x divide-border border border-border rounded-2xl bg-card shadow-sm overflow-hidden">
-            {stats.map(({ value, label, icon: Icon }) => (
-              <div key={label} className="flex flex-col items-center py-8 px-6 gap-2 group hover:bg-secondary/50 transition-colors duration-200">
-                <Icon className="h-5 w-5 text-muted-foreground mb-1 group-hover:text-primary transition-colors" />
-                <span className="text-3xl font-extrabold tracking-tight text-foreground">{value}</span>
-                <span className="text-sm text-muted-foreground">{label}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ── Features ── */}
-      <section id="features" className="py-24 px-6 relative">
-        <div className="max-w-6xl mx-auto">
-          <div className="text-center mb-16">
-            <p className="text-xs font-semibold tracking-widest uppercase text-primary mb-3">Platform Features</p>
-            <h2 className="text-3xl md:text-4xl font-bold mb-4">Everything you need to succeed</h2>
-            <p className="text-muted-foreground max-w-md mx-auto">
-              One platform, zero friction. From first message to final payment.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
-            {features.map((f, i) => (
-              <div
-                key={i}
-                className="group relative p-7 rounded-2xl bg-card border border-border hover:border-primary/40 transition-all duration-300 hover:-translate-y-1.5 hover:shadow-lg hover:shadow-primary/5"
-              >
-                {/* Subtle top accent line */}
-                <div className="absolute top-0 left-6 right-6 h-px bg-gradient-to-r from-transparent via-primary/30 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-
-                <div className={`mb-5 p-3 rounded-xl ${f.bg} w-fit group-hover:scale-110 transition-transform duration-300`}>
-                  <f.icon className={`h-6 w-6 ${f.color}`} />
+      {/* ── LOGO MARQUEE ── */}
+      <div className="relative py-10 overflow-hidden border-y border-white/5 bg-white/[0.01]">
+        <div className="flex w-[200%] animate-marquee">
+          {[...slides, ...slides].map((item, idx) => {
+            const Icon = item.icon;
+            return (
+              <div key={idx} className="flex items-center gap-4 px-12 shrink-0 group">
+                <div className="p-2 rounded-lg bg-white/5 group-hover:bg-blue-600/10 transition-colors">
+                  <Icon className="h-5 w-5 text-white/20 group-hover:text-blue-400 transition-colors" />
                 </div>
-                <h3 className="text-base font-bold mb-2 text-foreground">{f.title}</h3>
-                <p className="text-sm text-muted-foreground leading-relaxed">{f.desc}</p>
+                <span className="text-sm font-medium text-white/20 group-hover:text-white/60 transition-colors uppercase tracking-widest whitespace-nowrap">
+                  {item.tag}
+                </span>
               </div>
-            ))}
-          </div>
+            );
+          })}
+        </div>
+      </div>
+
+
+      {/* ── STATS ── */}
+      <section className="px-6 pb-24">
+        <div className="max-w-3xl mx-auto grid grid-cols-1 sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x divide-white/5 border border-white/5 rounded-2xl bg-white/[0.02] overflow-hidden">
+          {stats.map(({ value, label, icon: Icon }) => (
+            <div key={label} className="flex flex-col items-center py-8 px-6 gap-2 group hover:bg-blue-600/5 transition-colors">
+              <Icon className="h-5 w-5 text-white/20 mb-1 group-hover:text-blue-400 transition-colors" />
+              <span style={{ fontFamily: "'Syne', sans-serif" }} className="text-3xl font-extrabold text-white">{value}</span>
+              <span className="text-sm text-white/30">{label}</span>
+            </div>
+          ))}
         </div>
       </section>
 
-      {/* ── How It Works ── */}
-      <section className="py-24 px-6">
+      {/* ── HOW IT WORKS ── */}
+      <section id="how" className="py-24 px-6">
         <div className="max-w-5xl mx-auto">
           <div className="text-center mb-16">
-            <p className="text-xs font-semibold tracking-widest uppercase text-primary mb-3">How It Works</p>
-            <h2 className="text-3xl md:text-4xl font-bold">Three steps to your next deal</h2>
+            <p className="text-xs font-semibold tracking-widest uppercase text-blue-400 mb-3">How It Works</p>
+            <h2 style={{ fontFamily: "'Syne', sans-serif" }} className="text-3xl md:text-4xl font-bold">
+              Three steps to your next deal
+            </h2>
           </div>
 
           <div className="relative grid grid-cols-1 md:grid-cols-3 gap-10">
-            {/* Connector line (desktop) */}
-            <div className="hidden md:block absolute top-9 left-[calc(16.6%+1rem)] right-[calc(16.6%+1rem)] h-px bg-gradient-to-r from-border via-primary/40 to-border" />
-
+            <div className="hidden md:block absolute top-8 left-[20%] right-[20%] h-px bg-gradient-to-r from-transparent via-blue-600/40 to-transparent" />
             {[
               { step: "01", title: "Create & Share", desc: "Set up your profile and share it with potential clients via link or QR code." },
               { step: "02", title: "Chat & Agree", desc: "Discuss the project in real-time and lock in the terms directly in chat." },
-              { step: "03", title: "Deliver & Get Paid", desc: "Complete milestones, release escrow funds, and build your reputation." },
+              { step: "03", title: "Deliver & Get Paid", desc: "Complete milestones, release funds, and build your reputation." },
             ].map(({ step, title, desc }) => (
-              <div key={step} className="flex flex-col items-center text-center relative">
-                <div className="w-16 h-16 rounded-full bg-secondary border-2 border-border flex items-center justify-center mb-6 shadow-sm z-10 relative">
-                  <span className="text-primary font-extrabold text-lg">{step}</span>
+              <div key={step} className="flex flex-col items-center text-center">
+                <div className="w-16 h-16 rounded-full border border-blue-600/40 bg-blue-600/10 flex items-center justify-center mb-6 z-10 relative">
+                  <span style={{ fontFamily: "'Syne', sans-serif" }} className="text-blue-400 font-extrabold text-lg">{step}</span>
                 </div>
-                <h3 className="text-lg font-bold mb-2">{title}</h3>
-                <p className="text-sm text-muted-foreground leading-relaxed max-w-xs">{desc}</p>
+                <h3 className="text-base font-bold mb-2 text-white">{title}</h3>
+                <p className="text-sm text-white/35 leading-relaxed max-w-xs">{desc}</p>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* ── Testimonials ── */}
-      <section id="testimonials" className="py-24 px-6 bg-secondary/30">
+      {/* ── CAROUSEL ── */}
+      <section id="carousel" className="py-24 px-6">
         <div className="max-w-6xl mx-auto">
-          <div className="text-center mb-16">
-            <p className="text-xs font-semibold tracking-widest uppercase text-primary mb-3">Testimonials</p>
-            <h2 className="text-3xl md:text-4xl font-bold">Loved by freelancers worldwide</h2>
+
+          <div className="text-center mb-14">
+            <p className="text-xs font-semibold tracking-widest uppercase text-blue-400 mb-3">Features & Voices</p>
+            <h2 style={{ fontFamily: "'Syne', sans-serif" }} className="text-3xl md:text-4xl font-bold">
+              Everything you need. Nothing you don't.
+            </h2>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {testimonials.map(({ quote, name, role, initials }) => (
+          {/* Main carousel */}
+          <div
+            className="relative select-none group/carousel"
+            onMouseDown={onDragStart} onMouseUp={onDragEnd}
+            onTouchStart={onDragStart} onTouchEnd={onDragEnd}
+          >
+            {/* Slide track */}
+            <div className="overflow-hidden rounded-3xl border border-white/5 bg-[#0a0f1e] relative">
               <div
-                key={name}
-                className="p-7 rounded-2xl bg-card border border-border hover:border-primary/30 transition-all duration-300 hover:-translate-y-1 hover:shadow-md flex flex-col gap-5"
+                className="flex transition-transform duration-700 ease-[cubic-bezier(0.23,1,0.32,1)]"
+                style={{ transform: `translateX(-${current * 100}%)` }}
               >
-                <div className="flex gap-1">
-                  {[...Array(5)].map((_, i) => (
-                    <Star key={i} className="h-4 w-4 text-accent fill-current" />
-                  ))}
-                </div>
-                <p className="text-sm text-muted-foreground leading-relaxed flex-1">"{quote}"</p>
-                <div className="flex items-center gap-3 pt-2 border-t border-border">
-                  <div className="w-9 h-9 rounded-full bg-primary/15 flex items-center justify-center text-primary text-xs font-bold shrink-0">
-                    {initials}
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold">{name}</p>
-                    <p className="text-xs text-muted-foreground">{role}</p>
-                  </div>
-                </div>
+                {slides.map((s, idx) => {
+                  const SIcon = s.icon;
+                  return (
+                    <div key={idx} className="w-full shrink-0 relative min-h-[360px] md:min-h-[300px]">
+                      {/* Glow */}
+                      <div
+                        className="absolute top-0 right-0 w-[300px] h-[300px] rounded-full blur-[100px] pointer-events-none opacity-20"
+                        style={{ background: s.accent }}
+                      />
+                      {/* Top accent bar */}
+                      <div className="h-[2px] w-full" style={{ background: `linear-gradient(90deg, transparent, ${s.accent}, transparent)` }} />
+
+                      <div className="relative z-10 p-10 md:p-14 flex flex-col md:flex-row gap-10 items-start">
+                        <div className="flex-1">
+                          <div
+                            className="inline-flex items-center gap-2 text-xs font-semibold tracking-widest uppercase px-3 py-1 rounded-full border mb-6"
+                            style={{ color: s.accent, borderColor: `${s.accent}40`, background: `${s.accent}10` }}
+                          >
+                            <SIcon className="h-3 w-3" />
+                            {s.tag}
+                          </div>
+                          <h3
+                            style={{ fontFamily: "'Syne', sans-serif", whiteSpace: "pre-line" }}
+                            className="text-3xl md:text-4xl font-extrabold leading-tight mb-5 text-white"
+                          >
+                            {s.headline}
+                          </h3>
+                          <p className="text-white/40 text-base leading-relaxed max-w-md font-light">{s.body}</p>
+                        </div>
+
+                        <div className="shrink-0 flex items-center justify-center">
+                          <div
+                            className="w-24 h-24 md:w-32 md:h-32 rounded-2xl flex items-center justify-center"
+                            style={{ background: `${s.accent}15`, border: `1px solid ${s.accent}30` }}
+                          >
+                            <SIcon
+                              className="w-12 h-12 md:w-16 md:h-16"
+                              style={{ color: s.accent, opacity: 0.9 }}
+                              strokeWidth={1.2}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
-            ))}
+
+              {/* Manual navigation arrows - visible on hover */}
+              <button
+                onClick={() => go(-1)}
+                className="absolute left-4 top-1/2 -translate-y-1/2 w-12 h-12 rounded-full bg-[#050810]/60 border border-white/10 flex items-center justify-center text-white/40 hover:text-white hover:bg-blue-600 transition-all opacity-0 group-hover/carousel:opacity-100 backdrop-blur-md z-20"
+              >
+                <ChevronLeft className="h-6 w-6" />
+              </button>
+              <button
+                onClick={() => go(1)}
+                className="absolute right-4 top-1/2 -translate-y-1/2 w-12 h-12 rounded-full bg-[#050810]/60 border border-white/10 flex items-center justify-center text-white/40 hover:text-white hover:bg-blue-600 transition-all opacity-0 group-hover/carousel:opacity-100 backdrop-blur-md z-20"
+              >
+                <ChevronRight className="h-6 w-6" />
+              </button>
+
+              {/* Progress Bar */}
+              <div className="absolute bottom-0 left-0 h-1 bg-white/5 w-full z-10">
+                <div
+                  key={current}
+                  className="h-full bg-blue-500 animate-progress"
+                />
+              </div>
+            </div>
+
+            {/* Manual Navigation Dots */}
+            <div className="flex justify-center gap-2 mt-8">
+              {slides.map((_, i) => (
+                <button
+                  key={i}
+                  onClick={() => { setCurrent(i); startAuto(); }}
+                  className={`h-1.5 rounded-full transition-all duration-500 ${i === current ? "w-8 bg-blue-500" : "w-1.5 bg-white/10 hover:bg-white/20"
+                    }`}
+                />
+              ))}
+            </div>
           </div>
+
+
         </div>
       </section>
-
 
       {/* ── CTA ── */}
       <section className="px-6 py-28">
-        <div className="max-w-4xl mx-auto rounded-3xl border border-border bg-card relative overflow-hidden text-center p-10 md:p-20 shadow-xl">
-          {/* Background decoration */}
-          <div className="absolute -top-20 -right-20 w-64 h-64 rounded-full bg-primary/8 blur-[80px] pointer-events-none" />
-          <div className="absolute -bottom-16 -left-16 w-52 h-52 rounded-full bg-accent/8 blur-[70px] pointer-events-none" />
+        <div className="max-w-4xl mx-auto rounded-3xl border border-blue-500/20 bg-[#070c1a] relative overflow-hidden text-center p-10 md:p-20">
+          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[500px] h-[2px] bg-gradient-to-r from-transparent via-blue-500 to-transparent" />
+          <div className="absolute -top-40 left-1/2 -translate-x-1/2 w-[500px] h-[300px] rounded-full bg-blue-700/10 blur-[100px] pointer-events-none" />
 
           <div className="relative z-10">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-secondary border border-border text-xs font-semibold text-accent tracking-wide uppercase mb-8">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-blue-500/30 bg-blue-500/10 text-xs font-semibold text-blue-400 tracking-widest uppercase mb-8">
               <Zap className="h-3 w-3 fill-current" />
               Free to start
             </div>
 
-            <h2 className="text-3xl md:text-5xl font-extrabold mb-5 tracking-tight">
-              Ready to secure your next deal?
+            <h2 style={{ fontFamily: "'Syne', sans-serif" }} className="text-3xl md:text-5xl font-extrabold mb-5 tracking-tight">
+              Ready to close your next deal?
             </h2>
-            <p className="text-muted-foreground mb-10 text-base max-w-lg mx-auto leading-relaxed">
-              Join thousands of freelancers using Krovaa to get paid faster, work safer, and build lasting client relationships.
+            <p className="text-white/35 mb-10 text-base max-w-md mx-auto leading-relaxed font-light">
+              Join thousands of freelancers using Krovaa to work faster, communicate clearly, and get paid on time.
             </p>
 
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Link to="/register">
                 <Button
                   size="lg"
-                  className="h-13 px-10 text-base bg-primary text-primary-foreground hover:bg-primary/90 hover:scale-[1.03] transition-all shadow-xl shadow-primary/25"
+                  className="h-12 px-10 text-base bg-blue-600 hover:bg-blue-500 text-white shadow-2xl shadow-blue-900/50 hover:shadow-blue-600/40 hover:scale-[1.03] transition-all"
                 >
                   Create Your Account
                   <ArrowRight className="ml-2 h-4 w-4" />
@@ -332,7 +447,7 @@ const Landing = () => {
                 <Button
                   size="lg"
                   variant="outline"
-                  className="h-13 px-8 text-base hover:bg-secondary transition-colors"
+                  className="h-12 px-8 text-base border-white/10 text-white/60 hover:text-white hover:bg-white/5 hover:border-blue-500/30 transition-all bg-transparent"
                 >
                   Sign In
                 </Button>
@@ -342,60 +457,79 @@ const Landing = () => {
         </div>
       </section>
 
-      {/* ── Footer ── */}
-      <footer className="border-t border-border bg-sidebar-background px-6 pt-14 pb-8">
+      {/* ── FOOTER ── */}
+      <footer className="border-t border-white/5 px-6 pt-14 pb-8">
         <div className="max-w-7xl mx-auto">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-10 mb-12">
-            {/* Brand Logo with Link */}
-            <Link to="/" className="col-span-1 md:col-span-2 flex flex-col gap-4">
-              <div className="flex items-center gap-2.5">
-                <div className="bg-primary p-1.5 rounded-xl">
-                  <Send className="h-4 w-4 text-primary-foreground" />
-                </div>
-                <span className="text-xl font-bold">Krovaa</span>
+            <Link to="/" className="col-span-1 md:col-span-2 flex flex-col gap-4 group">
+              <div className="flex items-center">
+                <span style={{ fontFamily: "'Syne', sans-serif" }} className="text-2xl font-bold text-white group-hover:text-blue-500 transition-colors">Krovaa</span>
               </div>
-              <p className="text-sm text-muted-foreground leading-relaxed max-w-xs">
-                The world's first chat-first escrow platform — built for the modern gig economy.
+
+              <p className="text-sm text-white/25 leading-relaxed max-w-xs font-light">
+                Chat-first deal management for the modern gig economy.
               </p>
             </Link>
 
-            {/* Links */}
             <div>
-              <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-4">Product</p>
-              <div className="flex flex-col gap-3 text-sm text-muted-foreground">
-                <a href="#features" className="hover:text-foreground transition-colors w-fit">Features</a>
-                <a href="#" className="hover:text-foreground transition-colors w-fit">Security</a>
-                <a href="#" className="hover:text-foreground transition-colors w-fit">Changelog</a>
+              <p className="text-xs font-semibold uppercase tracking-widest text-white/20 mb-4">Product</p>
+              <div className="flex flex-col gap-3 text-sm text-white/30">
+                <a href="#carousel" className="hover:text-white transition-colors w-fit">Features</a>
+                <a href="#" className="hover:text-white transition-colors w-fit">Changelog</a>
+                <a href="#" className="hover:text-white transition-colors w-fit">Security</a>
               </div>
             </div>
 
             <div>
-              <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-4">Company</p>
-              <div className="flex flex-col gap-3 text-sm text-muted-foreground">
-                <a href="#" className="hover:text-foreground transition-colors w-fit">About</a>
-                <a href="#" className="hover:text-foreground transition-colors w-fit">Blog</a>
-                <Link to="/privacy" className="hover:text-foreground transition-colors w-fit">Privacy</Link>
-                <Link to="/terms" className="hover:text-foreground transition-colors w-fit">Terms</Link>
+              <p className="text-xs font-semibold uppercase tracking-widest text-white/20 mb-4">Company</p>
+              <div className="flex flex-col gap-3 text-sm text-white/30">
+                <a href="#" className="hover:text-white transition-colors w-fit">About</a>
+                <a href="#" className="hover:text-white transition-colors w-fit">Blog</a>
+                <Link to="/privacy" className="hover:text-white transition-colors w-fit">Privacy</Link>
+                <Link to="/terms" className="hover:text-white transition-colors w-fit">Terms</Link>
               </div>
             </div>
           </div>
 
-          <div className="flex flex-col md:flex-row justify-between items-center gap-4 pt-8 border-t border-border">
-            <p className="text-xs text-muted-foreground">
-              © 2026 Krovaa, Inc. Engineered for Security.
-            </p>
-            <div className="flex gap-6 text-xs text-muted-foreground">
-              <Link to="/privacy" className="hover:text-foreground transition-colors">Privacy Policy</Link>
-              <Link to="/terms" className="hover:text-foreground transition-colors">Terms of Service</Link>
-              <button onClick={() => {
-                localStorage.removeItem("cookie_consent");
-                window.location.reload();
-              }} className="hover:text-foreground transition-colors">Cookie Settings</button>
+          <div className="flex flex-col md:flex-row justify-between items-center gap-4 pt-8 border-t border-white/5">
+            <p className="text-xs text-white/20">© 2026 Krovaa, Inc.</p>
+            <div className="flex gap-6 text-xs text-white/20">
+              <Link to="/privacy" className="hover:text-white transition-colors">Privacy Policy</Link>
+              <Link to="/terms" className="hover:text-white transition-colors">Terms of Service</Link>
+              <button
+                onClick={() => { localStorage.removeItem("cookie_consent"); window.location.reload(); }}
+                className="hover:text-white transition-colors"
+              >
+                Cookie Settings
+              </button>
             </div>
           </div>
         </div>
       </footer>
-    </div>
+
+      {/* ── keyframes ── */}
+      <style>{`
+        @keyframes fadeSlide {
+          from { opacity: 0; transform: translateX(20px); }
+          to   { opacity: 1; transform: translateX(0);    }
+        }
+        @keyframes marquee {
+          0% { transform: translateX(0); }
+          100% { transform: translateX(-50%); }
+        }
+        .animate-marquee {
+          animation: marquee 40s linear infinite;
+        }
+        @keyframes progress {
+          from { width: 0%; }
+          to { width: 100%; }
+        }
+        .animate-progress {
+          animation: progress 5s linear forwards;
+        }
+      `}</style>
+
+    </div >
   );
 };
 

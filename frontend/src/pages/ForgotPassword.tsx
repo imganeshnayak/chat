@@ -89,10 +89,10 @@ const ForgotPassword = () => {
     return (
         <div className="min-h-screen bg-background flex items-center justify-center px-4">
             <div className="w-full max-w-sm">
-                <div className="flex items-center gap-2 justify-center mb-8">
-                    <Send className="h-8 w-8 text-primary" />
-                    <span className="text-2xl font-bold text-foreground">Krovaa</span>
+                <div className="flex items-center justify-center mb-8">
+                    <span style={{ fontFamily: "'Syne', sans-serif" }} className="text-3xl font-bold tracking-tight text-white">Krovaa</span>
                 </div>
+
 
                 <div className="bg-card border border-border rounded-xl p-6">
                     {/* Step 1: Email */}
