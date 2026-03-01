@@ -193,7 +193,7 @@ const WalletPage = () => {
                                     <span className="text-primary">{formatCurrency(parseFloat(addAmount) * (1 - 0.02 * 1.18))}</span>
                                 </div>
                                 <p className="text-[10px] text-muted-foreground italic text-center pt-1">
-                                    * Razorpay transaction charges are deducted from the top-up amount.
+                                    * Payment transaction charges are deducted from the top-up amount.
                                 </p>
                             </div>
                         )}
