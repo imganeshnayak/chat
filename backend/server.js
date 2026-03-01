@@ -6,6 +6,11 @@ import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
+// Resolve __dirname for ESM and load .env from the correct path
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+dotenv.config({ path: path.join(__dirname, '.env') });
+
 import authRoutes from './routes/auth.js';
 import userRoutes from './routes/users.js';
 import messageRoutes from './routes/messages.js';
@@ -18,8 +23,6 @@ import walletRoutes from './routes/wallet.js';
 import webhookRoutes from './routes/webhooks.js';
 import notificationRoutes from './routes/notifications.js';
 import setupSocket from './socket/chat.js';
-
-dotenv.config();
 
 const app = express();
 const server = createServer(app);
@@ -83,9 +86,18 @@ app.use('/api/payments', paymentRoutes);
 app.use('/api/wallet', walletRoutes);
 app.use('/api/notifications', notificationRoutes);
 
-// Health check
-app.get('/api/health', (req, res) => {
-    res.json({ status: 'ok', timestamp: new Date().toISOString() });
+// Health check (with DB connectivity test)
+app.get('/api/health', async (req, res) => {
+    try {
+        const { PrismaClient } = await import('@prisma/client');
+        const prisma = new PrismaClient();
+        await prisma.$queryRaw`SELECT 1`;
+        await prisma.$disconnect();
+        res.json({ status: 'ok', db: 'connected', timestamp: new Date().toISOString() });
+    } catch (err) {
+        console.error('Health check DB error:', err.message);
+        res.status(500).json({ status: 'ok', db: 'error', dbError: err.message, timestamp: new Date().toISOString() });
+    }
 });
 
 // Socket.IO

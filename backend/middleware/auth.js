@@ -1,9 +1,14 @@
 import jwt from 'jsonwebtoken';
 import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { PrismaClient } from '@prisma/client';
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+dotenv.config({ path: path.join(__dirname, '..', '.env') });
+
 const prisma = new PrismaClient();
-dotenv.config();
 
 const auth = async (req, res, next) => {
     const authHeader = req.header('Authorization');

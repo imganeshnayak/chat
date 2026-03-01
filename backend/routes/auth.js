@@ -175,7 +175,7 @@ router.post('/login', async (req, res) => {
         const { password: _, ...userWithoutPassword } = user;
         res.json({ user: userWithoutPassword, token });
     } catch (err) {
-        console.error('Login error:', err);
+        console.error('Login error:', err.message, err.stack);
         res.status(500).json({ error: 'Server error.' });
     }
 });
