@@ -73,7 +73,7 @@ const emailShell = (accentColor, headerLabel, bodyHtml) => `
                 <tr>
                   <td style="padding:20px 40px;border-top:1px solid rgba(255,255,255,0.05);" align="center">
                     <p style="color:rgba(255,255,255,0.12);font-size:11px;margin:0;letter-spacing:0.06em;">
-                      &copy; 2026 Krovaa, Inc. &nbsp;&middot;&nbsp; ${process.env.EMAIL_USER}
+                      &copy; 2026 Krovaa, Inc. &nbsp;&middot;&nbsp;
                     </p>
                   </td>
                 </tr>
