@@ -459,6 +459,34 @@ router.post('/cover-photo', auth, upload.single('coverPhoto'), async (req, res) 
     }
 });
 
+// DELETE /api/users/avatar - Remove avatar
+router.delete('/avatar', auth, async (req, res) => {
+    try {
+        await prisma.user.update({
+            where: { id: req.user.id },
+            data: { avatarUrl: null },
+        });
+        res.json({ message: 'Avatar removed.' });
+    } catch (err) {
+        console.error('Delete avatar error:', err);
+        res.status(500).json({ error: 'Server error.' });
+    }
+});
+
+// DELETE /api/users/cover-photo - Remove cover photo
+router.delete('/cover-photo', auth, async (req, res) => {
+    try {
+        await prisma.user.update({
+            where: { id: req.user.id },
+            data: { coverPhotoUrl: null },
+        });
+        res.json({ message: 'Cover photo removed.' });
+    } catch (err) {
+        console.error('Delete cover photo error:', err);
+        res.status(500).json({ error: 'Server error.' });
+    }
+});
+
 // PUT /api/users/:id/avatar - Upload avatar to Cloudinary (legacy endpoint)
 router.put('/:id/avatar', auth, upload.single('avatar'), async (req, res) => {
     try {

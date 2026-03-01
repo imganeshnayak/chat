@@ -202,6 +202,14 @@ export async function uploadCoverPhoto(file: File): Promise<{ coverPhotoUrl: str
   return res.json();
 }
 
+export function deleteAvatar(): Promise<{ message: string }> {
+  return apiFetch('/api/users/avatar', { method: 'DELETE' });
+}
+
+export function deleteCoverPhoto(): Promise<{ message: string }> {
+  return apiFetch('/api/users/cover-photo', { method: 'DELETE' });
+}
+
 // ============ Messages API ============
 
 export interface Message {

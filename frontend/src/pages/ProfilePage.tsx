@@ -6,13 +6,14 @@ import { Input } from "@/components/ui/input";
 import {
   ArrowLeft, Share2, MessageSquare, Twitter, Instagram, Linkedin,
   Github, Globe, Plus, Trash2, Star, LogOut, Facebook, Youtube,
-  Camera, Save, X, Edit2, Eye, MapPin, CheckCircle2, RotateCcw
+  Camera, Save, X, Edit2, Eye, MapPin, CheckCircle2, RotateCcw, Trash
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   getUser, getUserByUsername, updateUserProfile, uploadAvatar,
   rateUser, AuthUser, applyForVerification, getVerificationStatus,
-  getVerificationFee, VerificationRequest, getRatingEligibility, uploadCoverPhoto
+  getVerificationFee, VerificationRequest, getRatingEligibility, uploadCoverPhoto,
+  deleteAvatar, deleteCoverPhoto
 } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { Textarea } from "@/components/ui/textarea";
@@ -246,6 +247,28 @@ const ProfilePage = () => {
     }
   };
 
+  const handleDeleteAvatar = async () => {
+    if (!user) return;
+    try {
+      await deleteAvatar();
+      setUser({ ...user, avatarUrl: undefined });
+      toast({ title: "Profile photo removed." });
+    } catch {
+      toast({ title: "Failed to remove photo", variant: "destructive" });
+    }
+  };
+
+  const handleDeleteCoverPhoto = async () => {
+    if (!user) return;
+    try {
+      await deleteCoverPhoto();
+      setUser({ ...user, coverPhotoUrl: undefined });
+      toast({ title: "Cover photo removed." });
+    } catch {
+      toast({ title: "Failed to remove cover", variant: "destructive" });
+    }
+  };
+
   const addSocialLink = () => setEditForm({ ...editForm, socialLinks: [...editForm.socialLinks, { platform: "twitter", url: "" }] });
   const removeSocialLink = (i: number) => { const s = [...editForm.socialLinks]; s.splice(i, 1); setEditForm({ ...editForm, socialLinks: s }); };
   const updateSocialLink = (i: number, field: "platform" | "url", v: string) => { const s = [...editForm.socialLinks]; s[i] = { ...s[i], [field]: v }; setEditForm({ ...editForm, socialLinks: s }); };
@@ -304,7 +327,7 @@ const ProfilePage = () => {
       <div className="max-w-2xl mx-auto px-4 pb-24 relative z-10">
 
         {/* ── Cover ── */}
-        <div className="relative h-44 rounded-b-3xl overflow-hidden -mx-4">
+        <div className="relative h-44 rounded-b-3xl overflow-hidden -mx-4 group/cover">
           {user.coverPhotoUrl ? (
             <img src={user.coverPhotoUrl} alt="Cover" className="w-full h-full object-cover" />
           ) : (
@@ -316,21 +339,30 @@ const ProfilePage = () => {
               <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-48 h-48 rounded-full bg-blue-600/10 blur-[60px]" />
             </div>
           )}
-          {/* Cover upload overlay */}
+          {/* Cover actions — visible on hover */}
           {isOwnProfile && (
-            <label className="absolute inset-0 bg-black/0 hover:bg-black/40 flex items-center justify-center cursor-pointer transition-all group">
-              <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-2 px-4 py-2 rounded-xl bg-black/60 text-white text-xs font-medium border border-white/20">
-                <Camera className="h-3.5 w-3.5" /> Change cover
-              </div>
-              <input type="file" className="hidden" accept="image/*" onChange={handleCoverPhotoUpload} />
-            </label>
+            <div className="absolute bottom-3 right-3 flex items-center gap-2 opacity-0 group-hover/cover:opacity-100 transition-opacity duration-200">
+              {user.coverPhotoUrl && (
+                <button
+                  onClick={handleDeleteCoverPhoto}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-black/70 text-red-400 hover:bg-red-500/20 text-xs font-medium border border-red-500/30 transition-all"
+                  title="Remove cover photo"
+                >
+                  <Trash className="h-3 w-3" /> Remove
+                </button>
+              )}
+              <label className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-black/70 text-white hover:bg-white/10 text-xs font-medium border border-white/20 cursor-pointer transition-all">
+                <Camera className="h-3 w-3" /> Change cover
+                <input type="file" className="hidden" accept="image/*" onChange={handleCoverPhotoUpload} />
+              </label>
+            </div>
           )}
         </div>
 
         {/* ── Avatar + header ── */}
-        <div className="relative -mt-14 mb-6 flex items-end gap-4 px-2">
-          {/* Avatar */}
-          <div className="relative flex-shrink-0">
+        <div className="flex items-end gap-4 px-2 -mt-12 mb-5">
+          {/* Avatar with camera + delete overlay */}
+          <div className="relative flex-shrink-0 group/avatar">
             <div className="w-24 h-24 rounded-2xl border-4 border-[#050810] overflow-hidden shadow-xl shadow-black/50">
               {user.avatarUrl ? (
                 <img src={user.avatarUrl} alt={user.displayName} className="w-full h-full object-cover" />
@@ -343,14 +375,25 @@ const ProfilePage = () => {
               )}
             </div>
             {isOwnProfile && (
-              <label className="absolute -bottom-1 -right-1 w-7 h-7 bg-blue-600 hover:bg-blue-500 rounded-lg flex items-center justify-center cursor-pointer shadow-lg transition-colors">
-                <Camera className="h-3.5 w-3.5 text-white" />
-                <input type="file" className="hidden" accept="image/*" onChange={handleAvatarUpload} />
-              </label>
+              <div className="absolute inset-0 rounded-2xl bg-black/0 group-hover/avatar:bg-black/50 transition-all duration-200 flex items-center justify-center gap-1.5 opacity-0 group-hover/avatar:opacity-100">
+                <label className="cursor-pointer p-1.5 rounded-lg bg-white/10 hover:bg-white/20 transition-colors" title="Change photo">
+                  <Camera className="h-3.5 w-3.5 text-white" />
+                  <input type="file" className="hidden" accept="image/*" onChange={handleAvatarUpload} />
+                </label>
+                {user.avatarUrl && (
+                  <button
+                    onClick={handleDeleteAvatar}
+                    className="p-1.5 rounded-lg bg-red-500/20 hover:bg-red-500/40 transition-colors"
+                    title="Remove photo"
+                  >
+                    <Trash className="h-3.5 w-3.5 text-red-400" />
+                  </button>
+                )}
+              </div>
             )}
           </div>
 
-          {/* Name & status */}
+          {/* Name & status — below cover, no overlap */}
           <div className="pb-1 flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <h1 style={{ fontFamily: "'Syne', sans-serif" }} className="text-xl font-extrabold tracking-tight truncate">
@@ -360,7 +403,8 @@ const ProfilePage = () => {
                 <img src="/verified-badge.svg" alt="Verified" className="h-5 w-5 flex-shrink-0" title="Verified" />
               )}
             </div>
-            <div className="flex items-center gap-3 mt-1">
+            <div className="flex items-center gap-3 mt-1 flex-wrap">
+              <span className="text-xs text-white/30">@{user.username}</span>
               <div className="flex items-center gap-1.5">
                 <span className={`w-1.5 h-1.5 rounded-full ${user.status === "active" ? "bg-emerald-400 animate-pulse" : "bg-white/20"}`} />
                 <span className="text-[10px] text-white/30 uppercase tracking-widest font-medium">
@@ -368,13 +412,10 @@ const ProfilePage = () => {
                 </span>
               </div>
               {(user.city || user.pincode) && (
-                <>
-                  <span className="text-white/10">·</span>
-                  <div className="flex items-center gap-1 text-[11px] text-white/30">
-                    <MapPin className="h-3 w-3" />
-                    {user.city}{user.city && user.pincode ? ", " : ""}{user.pincode}
-                  </div>
-                </>
+                <div className="flex items-center gap-1 text-[11px] text-white/30">
+                  <MapPin className="h-3 w-3" />
+                  {user.city}{user.city && user.pincode ? ", " : ""}{user.pincode}
+                </div>
               )}
             </div>
           </div>

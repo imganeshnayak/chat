@@ -3,7 +3,10 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 
 export default function setupSocket(io) {
+    // userId → socketId (forward lookup)
     const onlineUsers = new Map();
+    // socketId → userId (reverse lookup — O(1) disconnect)
+    const socketToUser = new Map();
 
     io.on('connection', (socket) => {
         console.log(`🔌 Socket connected: ${socket.id}`);
@@ -18,8 +21,10 @@ export default function setupSocket(io) {
 
                 if (user) {
                     onlineUsers.set(userId, socket.id);
+                    socketToUser.set(socket.id, userId); // reverse map
+
                     socket.join(chatId);
-                    socket.join(`user_${userId}`); // Join personal room for notifications
+                    socket.join(`user_${userId}`); // personal notification room
 
                     // If admin, join the admin broadcast room
                     if (user.role === 'admin') {
@@ -27,8 +32,9 @@ export default function setupSocket(io) {
                         console.log(`🛡️ Admin ${userId} joined admin_broadcast room`);
                     }
 
-                    io.emit('userOnline', { userId, online: true });
-                    console.log(`👤 User ${userId} joined chat ${chatId} and personal room`);
+                    // Only notify the other person in this chat, not everyone
+                    socket.to(chatId).emit('userOnline', { userId, online: true });
+                    console.log(`👤 User ${userId} joined chat ${chatId}`);
                 }
             } catch (err) {
                 console.error('Socket join error:', err);
@@ -40,8 +46,16 @@ export default function setupSocket(io) {
 
             try {
                 const message = await prisma.message.create({
-                    data: { senderId: sender_id, receiverId: receiver_id, chatId: chat_id, content, messageType: message_type || 'text' },
-                    include: { sender: { select: { displayName: true, avatarUrl: true, username: true } } },
+                    data: {
+                        senderId: sender_id,
+                        receiverId: receiver_id,
+                        chatId: chat_id,
+                        content,
+                        messageType: message_type || 'text'
+                    },
+                    include: {
+                        sender: { select: { displayName: true, avatarUrl: true, username: true } }
+                    },
                 });
 
                 const result = {
@@ -65,12 +79,13 @@ export default function setupSocket(io) {
         });
 
         socket.on('disconnect', () => {
-            for (const [userId, socketId] of onlineUsers.entries()) {
-                if (socketId === socket.id) {
-                    onlineUsers.delete(userId);
-                    io.emit('userOnline', { userId, online: false });
-                    break;
-                }
+            // O(1) reverse lookup instead of O(n) loop
+            const userId = socketToUser.get(socket.id);
+            if (userId !== undefined) {
+                onlineUsers.delete(userId);
+                socketToUser.delete(socket.id);
+                // Broadcast offline to all rooms this socket was in
+                socket.broadcast.emit('userOnline', { userId, online: false });
             }
             console.log(`🔌 Socket disconnected: ${socket.id}`);
         });
