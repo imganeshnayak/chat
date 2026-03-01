@@ -20,35 +20,11 @@ services:
     networks:
       - krovaa_network
 
-  backend:
-    build: ./backend
-    container_name: krovaa-backend
-    restart: always
-    environment:
-      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@database:5432/krovaa_chat?schema=public
-      PORT: 5000
-      JWT_SECRET: ${JWT_SECRET}
-      CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME}
-      CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY}
-      CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET}
-      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
-      FRONTEND_URL: ${FRONTEND_URL}
-      RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID}
-      RAZORPAY_KEY_SECRET: ${RAZORPAY_KEY_SECRET}
-      EMAIL_USER: ${EMAIL_USER}
-      EMAIL_PASS: ${EMAIL_PASS}
-    depends_on:
-      - database
-    ports:
-      - "5000:5000"
-    networks:
-      - krovaa_network
-
   frontend:
     build:
       context: ./frontend
       args:
-        - VITE_API_URL=${VITE_API_URL:-https://Krovaa.com}
+        - VITE_API_URL=${VITE_API_URL:-https://krovaa.com}
     container_name: krovaa-frontend
     restart: always
     ports:
@@ -56,8 +32,6 @@ services:
       - "443:443"
     volumes:
       - /etc/letsencrypt:/etc/letsencrypt:ro
-    depends_on:
-      - backend
     networks:
       - krovaa_network
 
