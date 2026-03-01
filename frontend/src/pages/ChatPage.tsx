@@ -726,13 +726,17 @@ const ChatView = ({
                             (msg.messageType === 'escrow_released' || (msg as any).message_type === 'escrow_released')
                               ? "bg-gradient-to-br from-emerald-600 to-teal-700 text-white shadow-lg border border-white/20 rounded-2xl"
                               : (msg.messageType === 'notification' || (msg as any).message_type === 'notification' || isAdminMsg)
-                                ? (isAdminMsg ? (msg.color ? "" : "bg-gradient-to-br from-blue-600 via-indigo-700 to-violet-800 text-white shadow-xl border border-white/30 rounded-2xl") : "bg-gradient-to-br from-amber-500 to-orange-600 text-white shadow-lg border border-white/20 rounded-2xl")
+                                ? (isAdminMsg ? (msg.color ? "" : "bg-[#0d1117] text-white shadow-xl border border-white/10 rounded-2xl") : "bg-gradient-to-br from-amber-500 to-orange-600 text-white shadow-lg border border-white/20 rounded-2xl")
                                 : "bg-gradient-to-br from-indigo-600 to-purple-700 text-white shadow-lg border border-white/20 rounded-2xl"
                           ) : ""}`}
                         style={isEscrowOrNotify && isAdminMsg && msg.color ? {
-                          background: `linear-gradient(135deg, ${msg.color} 0%, ${msg.color}cc 100%)`,
-                          boxShadow: `0 10px 15px -3px ${msg.color}40`,
-                          border: '1px solid rgba(255,255,255,0.3)'
+                          background: '#0d1117',
+                          boxShadow: `0 0 0 1px rgba(255,255,255,0.07), 0 8px 24px -4px ${msg.color}30`,
+                          borderLeft: `3px solid ${msg.color}`,
+                          borderRadius: '14px'
+                        } : isEscrowOrNotify && isAdminMsg && !msg.color ? {
+                          borderLeft: '3px solid #3b82f6',
+                          borderRadius: '14px'
                         } : {}}
                       >
                         {msg.isViewOnce ? (
@@ -761,59 +765,82 @@ const ChatView = ({
                           </div>
                         ) : isEscrowOrNotify ? (
                           <div className="space-y-3">
-                            <div className="flex items-center gap-3">
-                              <div className={`h-10 w-10 rounded-full flex items-center justify-center backdrop-blur-md shadow-inner ${isAdminMsg ? 'bg-white/30 border border-white/40' : 'bg-white/20'}`}>
-                                {msg.messageType === 'escrow_created' || (msg as any).message_type === 'escrow_created' ? <Plus className="h-5 w-5" /> : (
-                                  (msg.messageType === 'escrow_released' || (msg as any).message_type === 'escrow_released') ? <IndianRupee className="h-5 w-5" /> : (
-                                    (msg.messageType === 'notification' || (msg as any).message_type === 'notification' || isAdminMsg) ? <ShieldCheck className="h-5 w-5" /> : <ShieldCheck className="h-5 w-5" />
-                                  )
-                                )}
+                            {/* Header row */}
+                            <div className="flex items-center gap-2.5">
+                              <div className={`h-8 w-8 rounded-lg flex items-center justify-center shrink-0 ${isAdminMsg
+                                  ? 'bg-blue-500/15 border border-blue-500/20'
+                                  : (msg.messageType === 'escrow_released' || (msg as any).message_type === 'escrow_released')
+                                    ? 'bg-emerald-500/20 border border-emerald-500/20'
+                                    : 'bg-white/10 border border-white/10'
+                                }`}>
+                                {msg.messageType === 'escrow_created' || (msg as any).message_type === 'escrow_created'
+                                  ? <Plus className="h-4 w-4 text-indigo-300" />
+                                  : (msg.messageType === 'escrow_released' || (msg as any).message_type === 'escrow_released')
+                                    ? <IndianRupee className="h-4 w-4 text-emerald-300" />
+                                    : <ShieldCheck className="h-4 w-4 text-blue-400" />
+                                }
                               </div>
-                              <div>
-                                <p className="font-bold text-base leading-none flex items-center gap-1.5">
-                                  {isAdminMsg ? (
-                                    <>
-                                      <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-                                      Admin Support
-                                    </>
-                                  ) : msg.messageType === 'escrow_created' || (msg as any).message_type === 'escrow_created' ? "Escrow Deal Created" : (
-                                    (msg.messageType === 'escrow_released' || (msg as any).message_type === 'escrow_released') ? "Payment Released" : (
-                                      (msg.messageType === 'notification' || (msg as any).message_type === 'notification') ? (msg.content.match(/\*\*(.*?)\*\*/) ? msg.content.match(/\*\*(.*?)\*\*/)?.[1] : "System Update") : "Payment Confirmed"
-                                    )
-                                  )}
+                              <div className="flex-1 min-w-0">
+                                <p className="font-semibold text-[13px] text-white leading-none tracking-tight">
+                                  {isAdminMsg
+                                    ? "Support"
+                                    : msg.messageType === 'escrow_created' || (msg as any).message_type === 'escrow_created'
+                                      ? "Escrow Created"
+                                      : (msg.messageType === 'escrow_released' || (msg as any).message_type === 'escrow_released')
+                                        ? "Payment Released"
+                                        : (msg.messageType === 'notification' || (msg as any).message_type === 'notification')
+                                          ? (msg.content.match(/\*\*(.*?)\*\*/) ? msg.content.match(/\*\*(.*?)\*\*/)?.[1] : "System Update")
+                                          : "Payment Confirmed"
+                                  }
                                 </p>
-                                <p className="text-[10px] text-white/70 mt-1 uppercase tracking-wider font-bold">
-                                  {isAdminMsg ? "Official Help Center" : (msg.messageType === 'notification' || (msg as any).message_type === 'notification') ? "Official Notification" : "Official Escrow System"}
+                                <p className="text-[10px] text-white/40 mt-0.5 uppercase tracking-widest font-medium">
+                                  {isAdminMsg ? "Krovaa · Official" : (msg.messageType === 'notification' || (msg as any).message_type === 'notification') ? "Krovaa · Notification" : "Krovaa · Escrow"}
                                 </p>
                               </div>
+                              {isAdminMsg && (
+                                <div className="flex items-center gap-1 bg-blue-500/10 border border-blue-500/20 px-2 py-0.5 rounded-full shrink-0">
+                                  <span className="h-1.5 w-1.5 rounded-full bg-blue-400 animate-pulse" />
+                                  <span className="text-[9px] text-blue-400 font-bold tracking-widest uppercase">Live</span>
+                                </div>
+                              )}
                             </div>
-                            <div className={`bg-black/20 rounded-xl p-3 border border-white/10 backdrop-blur-sm ${isAdminMsg ? 'border-white/20' : ''}`}>
-                              <p className="text-sm font-medium leading-relaxed">
-                                {isAdminMsg ? (
-                                  msg.content.split('\n').map((line, i) => (
-                                    <React.Fragment key={i}>
-                                      {line.split(/(\*\*.*?\*\*)/).map((part, j) => {
-                                        if (part.startsWith('**') && part.endsWith('**')) {
-                                          return <strong key={j} className="text-emerald-300">{part.slice(2, -2)}</strong>;
-                                        }
-                                        return part;
-                                      })}
-                                      {i < msg.content.split('\n').length - 1 && <br />}
-                                    </React.Fragment>
-                                  ))
-                                ) : (msg.messageType === 'notification' || (msg as any).message_type === 'notification') ? msg.content.split('\n\n')[1] || msg.content.replace(/🔔 \*\*(.*?)\*\*\n\n/, '') : msg.content}
-                              </p>
+
+                            {/* Divider */}
+                            <div className="h-px bg-white/5" />
+
+                            {/* Message body */}
+                            <div className="text-[13px] text-white/80 leading-relaxed font-normal">
+                              {isAdminMsg ? (
+                                msg.content.split('\n').map((line, i) => (
+                                  <React.Fragment key={i}>
+                                    {line.split(/(\*\*.*?\*\*)/).map((part, j) => {
+                                      if (part.startsWith('**') && part.endsWith('**')) {
+                                        return <span key={j} className="font-semibold text-white">{part.slice(2, -2)}</span>;
+                                      }
+                                      return part;
+                                    })}
+                                    {i < msg.content.split('\n').length - 1 && <br />}
+                                  </React.Fragment>
+                                ))
+                              ) : (msg.messageType === 'notification' || (msg as any).message_type === 'notification')
+                                ? msg.content.split('\n\n')[1] || msg.content.replace(/🔔 \*\*(.*?)\*\*\n\n/, '')
+                                : msg.content
+                              }
                             </div>
+
+                            {/* Escrow CTA */}
                             {(msg.messageType?.startsWith?.('escrow_') || (msg as any).message_type?.startsWith?.('escrow_')) && (
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   navigate(`/escrow?chatId=${selectedChat.chat_id}`);
                                 }}
-                                className={`w-full py-2 bg-white rounded-lg text-sm font-bold shadow-sm hover:bg-white/90 transition-all flex items-center justify-center gap-2 active:scale-[0.98] ${(msg.messageType === 'escrow_released' || (msg as any).message_type === 'escrow_released') ? "text-emerald-700" : "text-indigo-700"
+                                className={`w-full py-2 rounded-lg text-[12px] font-semibold tracking-wide border transition-all flex items-center justify-center gap-1.5 active:scale-[0.98] ${(msg.messageType === 'escrow_released' || (msg as any).message_type === 'escrow_released')
+                                    ? "border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/10"
+                                    : "border-white/10 text-white/70 hover:bg-white/5"
                                   }`}
                               >
-                                View Details <ArrowLeft className="h-4 w-4 rotate-180" />
+                                View Details <ArrowLeft className="h-3.5 w-3.5 rotate-180" />
                               </button>
                             )}
                           </div>
