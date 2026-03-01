@@ -62,7 +62,7 @@
 
   body {
     @apply bg-background text-foreground;
-    font-family: 'DM Sans', 'Inter', system-ui, sans-serif;
+    font-family: 'Rubik', sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     overflow-x: hidden;
@@ -78,9 +78,9 @@
   h4,
   h5,
   h6 {
-    font-family: 'Syne', 'Outfit', sans-serif;
-    letter-spacing: -0.03em;
-    font-weight: 700;
+    font-family: 'Rubik', sans-serif;
+    letter-spacing: 0;
+    font-weight: 600;
   }
 
   ::selection {

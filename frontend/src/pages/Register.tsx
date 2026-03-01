@@ -104,7 +104,7 @@ const Register = () => {
 
   return (
     <div
-      style={{ fontFamily: "'DM Sans', sans-serif" }}
+      style={{ fontFamily: "'Rubik', sans-serif" }}
       className="min-h-screen bg-[#050810] text-white flex overflow-hidden"
     >
       {/* ── LEFT PANEL — brand statement ── */}
@@ -126,7 +126,7 @@ const Register = () => {
         {/* Decorative rotated text */}
         <div
           className="absolute bottom-32 -left-16 text-[200px] font-extrabold tracking-tighter select-none pointer-events-none opacity-[0.025]"
-          style={{ fontFamily: "'Syne', sans-serif", transform: "rotate(-90deg) translateX(20%)", transformOrigin: "left bottom", color: "#3b82f6", lineHeight: 1 }}
+          style={{ fontFamily: "'Rubik', sans-serif", transform: "rotate(-90deg) translateX(20%)", transformOrigin: "left bottom", color: "#3b82f6", lineHeight: 1 }}
         >
           KROVAA
         </div>
@@ -138,7 +138,7 @@ const Register = () => {
             <div className="w-8 h-8 bg-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-900/50 group-hover:bg-blue-500 transition-colors">
               <svg viewBox="0 0 16 16" className="w-4 h-4 fill-white"><path d="M2 2h12a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H5l-4 3V3a1 1 0 0 1 1-1z" /></svg>
             </div>
-            <span style={{ fontFamily: "'Syne', sans-serif" }} className="text-lg font-bold tracking-tight">Krovaa</span>
+            <span style={{ fontFamily: "'Rubik', sans-serif" }} className="text-lg font-bold tracking-tight">Krovaa</span>
           </Link>
 
           {/* Main statement */}
@@ -148,7 +148,7 @@ const Register = () => {
               {step === "form" ? "Step 1 of 2" : "Step 2 of 2"}
             </div>
 
-            <h2 style={{ fontFamily: "'Syne', sans-serif" }} className="text-5xl font-extrabold leading-[1.05] tracking-tight mb-6">
+            <h2 style={{ fontFamily: "'Rubik', sans-serif" }} className="text-5xl font-extrabold leading-[1.05] tracking-tight mb-6">
               {step === "form" ? (
                 <>Your work,<br /><span className="text-blue-400">your rules.</span></>
               ) : (
@@ -166,7 +166,7 @@ const Register = () => {
           <div className="flex gap-8">
             {[["12K+", "Freelancers"], ["4.9★", "Rating"], ["$4.2M", "Transacted"]].map(([v, l]) => (
               <div key={l}>
-                <p style={{ fontFamily: "'Syne', sans-serif" }} className="text-xl font-extrabold text-white">{v}</p>
+                <p style={{ fontFamily: "'Rubik', sans-serif" }} className="text-xl font-extrabold text-white">{v}</p>
                 <p className="text-[10px] text-white/25 tracking-widest uppercase mt-0.5">{l}</p>
               </div>
             ))}
@@ -184,7 +184,7 @@ const Register = () => {
 
         {/* Mobile logo */}
         <div className="lg:hidden flex items-center justify-between px-8 pt-8 pb-4">
-          <Link to="/" style={{ fontFamily: "'Syne', sans-serif" }} className="text-xl font-bold">Krovaa</Link>
+          <Link to="/" style={{ fontFamily: "'Rubik', sans-serif" }} className="text-xl font-bold">Krovaa</Link>
           <div className="text-xs text-white/30">
             Step {step === "form" ? "1" : "2"} of 2
           </div>
@@ -202,7 +202,7 @@ const Register = () => {
                 {/* Header */}
                 <div className="flex items-start justify-between mb-10">
                   <div>
-                    <h1 style={{ fontFamily: "'Syne', sans-serif" }} className="text-3xl font-extrabold tracking-tight text-white mb-1.5">
+                    <h1 style={{ fontFamily: "'Rubik', sans-serif" }} className="text-3xl font-extrabold tracking-tight text-white mb-1.5">
                       Create account
                     </h1>
                     <p className="text-white/30 text-sm font-light">
@@ -348,7 +348,7 @@ const Register = () => {
                       1
                     </span>
                   </div>
-                  <h1 style={{ fontFamily: "'Syne', sans-serif" }} className="text-3xl font-extrabold tracking-tight mb-2">
+                  <h1 style={{ fontFamily: "'Rubik', sans-serif" }} className="text-3xl font-extrabold tracking-tight mb-2">
                     Check your inbox
                   </h1>
                   <p className="text-sm text-white/30 font-light leading-relaxed">
@@ -378,7 +378,7 @@ const Register = () => {
                       maxLength={6}
                       autoFocus
                       required
-                      style={{ fontFamily: "'Syne', sans-serif" }}
+                      style={{ fontFamily: "'Rubik', sans-serif" }}
                     />
                     {/* Progress dots */}
                     <div className="flex gap-2 justify-center mt-4">

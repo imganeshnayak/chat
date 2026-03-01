@@ -55,7 +55,7 @@ const Login = () => {
 
   return (
     <div
-      style={{ fontFamily: "'DM Sans', sans-serif" }}
+      style={{ fontFamily: "'Rubik', sans-serif" }}
       className="min-h-screen bg-[#050810] text-white flex overflow-hidden"
     >
 
@@ -75,7 +75,7 @@ const Login = () => {
         {/* Watermark */}
         <div
           className="absolute bottom-32 -left-16 text-[200px] font-extrabold tracking-tighter select-none pointer-events-none opacity-[0.025]"
-          style={{ fontFamily: "'Syne', sans-serif", transform: "rotate(-90deg) translateX(20%)", transformOrigin: "left bottom", color: "#3b82f6", lineHeight: 1 }}
+          style={{ fontFamily: "'Rubik', sans-serif", transform: "rotate(-90deg) translateX(20%)", transformOrigin: "left bottom", color: "#3b82f6", lineHeight: 1 }}
         >
           KROVAA
         </div>
@@ -87,7 +87,7 @@ const Login = () => {
             <div className="w-8 h-8 bg-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-900/50 group-hover:bg-blue-500 transition-colors">
               <svg viewBox="0 0 16 16" className="w-4 h-4 fill-white"><path d="M2 2h12a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H5l-4 3V3a1 1 0 0 1 1-1z" /></svg>
             </div>
-            <span style={{ fontFamily: "'Syne', sans-serif" }} className="text-lg font-bold tracking-tight">Krovaa</span>
+            <span style={{ fontFamily: "'Rubik', sans-serif" }} className="text-lg font-bold tracking-tight">Krovaa</span>
           </Link>
 
           {/* Statement */}
@@ -97,7 +97,7 @@ const Login = () => {
               Welcome back
             </div>
 
-            <h2 style={{ fontFamily: "'Syne', sans-serif" }} className="text-5xl font-extrabold leading-[1.05] tracking-tight mb-6">
+            <h2 style={{ fontFamily: "'Rubik', sans-serif" }} className="text-5xl font-extrabold leading-[1.05] tracking-tight mb-6">
               Pick up<br />
               <span className="text-blue-400">where you left off.</span>
             </h2>
@@ -110,7 +110,7 @@ const Login = () => {
           <div className="flex gap-8">
             {[["12K+", "Freelancers"], ["4.9★", "Rating"], ["$4.2M", "Transacted"]].map(([v, l]) => (
               <div key={l}>
-                <p style={{ fontFamily: "'Syne', sans-serif" }} className="text-xl font-extrabold text-white">{v}</p>
+                <p style={{ fontFamily: "'Rubik', sans-serif" }} className="text-xl font-extrabold text-white">{v}</p>
                 <p className="text-[10px] text-white/25 tracking-widest uppercase mt-0.5">{l}</p>
               </div>
             ))}
@@ -128,7 +128,7 @@ const Login = () => {
 
         {/* Mobile logo */}
         <div className="lg:hidden flex items-center justify-between px-8 pt-8 pb-4">
-          <Link to="/" style={{ fontFamily: "'Syne', sans-serif" }} className="text-xl font-bold">Krovaa</Link>
+          <Link to="/" style={{ fontFamily: "'Rubik', sans-serif" }} className="text-xl font-bold">Krovaa</Link>
         </div>
 
         <div className="flex-1 flex items-center justify-center px-8 py-12 relative z-10">
@@ -139,7 +139,7 @@ const Login = () => {
             {/* Header */}
             <div className="flex items-start justify-between mb-10">
               <div>
-                <h1 style={{ fontFamily: "'Syne', sans-serif" }} className="text-3xl font-extrabold tracking-tight text-white mb-1.5">
+                <h1 style={{ fontFamily: "'Rubik', sans-serif" }} className="text-3xl font-extrabold tracking-tight text-white mb-1.5">
                   Sign in
                 </h1>
                 <p className="text-white/30 text-sm font-light">

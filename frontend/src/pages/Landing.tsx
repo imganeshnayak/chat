@@ -132,7 +132,7 @@ const Landing = () => {
 
   return (
     <div
-      style={{ fontFamily: "'DM Sans', sans-serif" }}
+      style={{ fontFamily: "'Rubik', sans-serif" }}
       className="min-h-screen bg-[#050810] text-white selection:bg-blue-600 selection:text-white overflow-x-hidden"
     >
 
@@ -156,7 +156,7 @@ const Landing = () => {
       <nav className="sticky top-0 z-50 border-b border-white/5 backdrop-blur-2xl bg-[#050810]/80">
         <div className="flex items-center justify-between px-6 py-4 max-w-7xl mx-auto">
           <Link to="/" className="flex items-center group">
-            <span style={{ fontFamily: "'Syne', sans-serif" }} className="text-2xl font-bold tracking-tight text-white group-hover:text-blue-500 transition-colors">
+            <span style={{ fontFamily: "'Rubik', sans-serif" }} className="text-2xl font-bold tracking-tight text-white group-hover:text-blue-500 transition-colors">
               Krovaa
             </span>
           </Link>
@@ -190,7 +190,7 @@ const Landing = () => {
           </div>
 
           <h1
-            style={{ fontFamily: "'Syne', sans-serif", lineHeight: 1.02 }}
+            style={{ fontFamily: "'Rubik', sans-serif", lineHeight: 1.02 }}
             className="text-5xl sm:text-6xl md:text-[6rem] font-extrabold tracking-tight mb-8"
           >
             Chat.{" "}
@@ -267,7 +267,7 @@ const Landing = () => {
           {stats.map(({ value, label, icon: Icon }) => (
             <div key={label} className="flex flex-col items-center py-8 px-6 gap-2 group hover:bg-blue-600/5 transition-colors">
               <Icon className="h-5 w-5 text-white/20 mb-1 group-hover:text-blue-400 transition-colors" />
-              <span style={{ fontFamily: "'Syne', sans-serif" }} className="text-3xl font-extrabold text-white">{value}</span>
+              <span style={{ fontFamily: "'Rubik', sans-serif" }} className="text-3xl font-extrabold text-white">{value}</span>
               <span className="text-sm text-white/30">{label}</span>
             </div>
           ))}
@@ -279,7 +279,7 @@ const Landing = () => {
         <div className="max-w-5xl mx-auto">
           <div className="text-center mb-16">
             <p className="text-xs font-semibold tracking-widest uppercase text-blue-400 mb-3">How It Works</p>
-            <h2 style={{ fontFamily: "'Syne', sans-serif" }} className="text-3xl md:text-4xl font-bold">
+            <h2 style={{ fontFamily: "'Rubik', sans-serif" }} className="text-3xl md:text-4xl font-bold">
               Three steps to your next deal
             </h2>
           </div>
@@ -293,7 +293,7 @@ const Landing = () => {
             ].map(({ step, title, desc }) => (
               <div key={step} className="flex flex-col items-center text-center">
                 <div className="w-16 h-16 rounded-full border border-blue-600/40 bg-blue-600/10 flex items-center justify-center mb-6 z-10 relative">
-                  <span style={{ fontFamily: "'Syne', sans-serif" }} className="text-blue-400 font-extrabold text-lg">{step}</span>
+                  <span style={{ fontFamily: "'Rubik', sans-serif" }} className="text-blue-400 font-extrabold text-lg">{step}</span>
                 </div>
                 <h3 className="text-base font-bold mb-2 text-white">{title}</h3>
                 <p className="text-sm text-white/35 leading-relaxed max-w-xs">{desc}</p>
@@ -309,7 +309,7 @@ const Landing = () => {
 
           <div className="text-center mb-14">
             <p className="text-xs font-semibold tracking-widest uppercase text-blue-400 mb-3">Features & Voices</p>
-            <h2 style={{ fontFamily: "'Syne', sans-serif" }} className="text-3xl md:text-4xl font-bold">
+            <h2 style={{ fontFamily: "'Rubik', sans-serif" }} className="text-3xl md:text-4xl font-bold">
               Everything you need. Nothing you don't.
             </h2>
           </div>
@@ -348,7 +348,7 @@ const Landing = () => {
                             {s.tag}
                           </div>
                           <h3
-                            style={{ fontFamily: "'Syne', sans-serif", whiteSpace: "pre-line" }}
+                            style={{ fontFamily: "'Rubik', sans-serif", whiteSpace: "pre-line" }}
                             className="text-3xl md:text-4xl font-extrabold leading-tight mb-5 text-white"
                           >
                             {s.headline}
@@ -426,7 +426,7 @@ const Landing = () => {
               Free to start
             </div>
 
-            <h2 style={{ fontFamily: "'Syne', sans-serif" }} className="text-3xl md:text-5xl font-extrabold mb-5 tracking-tight">
+            <h2 style={{ fontFamily: "'Rubik', sans-serif" }} className="text-3xl md:text-5xl font-extrabold mb-5 tracking-tight">
               Ready to close your next deal?
             </h2>
             <p className="text-white/35 mb-10 text-base max-w-md mx-auto leading-relaxed font-light">
@@ -463,7 +463,7 @@ const Landing = () => {
           <div className="grid grid-cols-1 md:grid-cols-4 gap-10 mb-12">
             <Link to="/" className="col-span-1 md:col-span-2 flex flex-col gap-4 group">
               <div className="flex items-center">
-                <span style={{ fontFamily: "'Syne', sans-serif" }} className="text-2xl font-bold text-white group-hover:text-blue-500 transition-colors">Krovaa</span>
+                <span style={{ fontFamily: "'Rubik', sans-serif" }} className="text-2xl font-bold text-white group-hover:text-blue-500 transition-colors">Krovaa</span>
               </div>
 
               <p className="text-sm text-white/25 leading-relaxed max-w-xs font-light">
